@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600&family=Oswald:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  /* ── PALETTE ── */
+  --lk-black:     #08060F;
+  --lk-void:      #100018;
+  --lk-deep:      #1A0030;
+  --lk-pink:      #FF2D9B;
+  --lk-pink-dim:  #CC1F7A;
+  --lk-pink-glow: #FF6EC7;
+  --lk-teal:      #00E5CC;
+  --lk-teal-dim:  #00B8A2;
+  --lk-violet:    #7B2FBE;
+  --lk-violet-mid:#9B4FDE;
+  --lk-gold:      #F0C040;
+  --lk-gold-dim:  #C8A030;
+  --lk-white:     #F0EAF8;
+  --lk-muted:     #6644AA;
+  --lk-subtle:    #2A0040;
+
+  /* ── TYPOGRAPHY ── */
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-heading: 'Oswald', sans-serif;
+  --font-body:    'Inter', sans-serif;
+  --font-mono:    'Space Mono', monospace;
+
+  /* ── SHELL ── */
+  --sidebar-w: 220px;
+  --topbar-h:  56px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--lk-black);
+  color: var(--lk-white);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--lk-void); }
+::-webkit-scrollbar-thumb { background: var(--lk-pink); border-radius: 2px; }
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+
+/* ── TYPOGRAPHY UTILITIES ── */
+.font-display { font-family: var(--font-display); }
+.font-heading { font-family: var(--font-heading); }
+.font-mono    { font-family: var(--font-mono); }
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--lk-pink); color: var(--lk-black); }
+.btn-primary:hover { background: var(--lk-pink-glow); }
+.btn-secondary { background: transparent; color: var(--lk-teal); border: 1px solid var(--lk-teal-dim); }
+.btn-secondary:hover { background: rgba(0,229,204,0.1); }
+.btn-ghost { background: transparent; color: var(--lk-muted); border: 1px solid var(--lk-subtle); }
+.btn-ghost:hover { color: var(--lk-white); border-color: var(--lk-muted); }
+.btn-gold { background: var(--lk-gold); color: var(--lk-black); }
+.btn-gold:hover { background: #ffdd55; }
+.btn-danger { background: transparent; color: #ff4444; border: 1px solid #ff444455; }
+.btn-danger:hover { background: rgba(255,68,68,0.1); }
+.btn-sm { padding: 6px 14px; font-size: 10px; }
+.btn-lg { padding: 14px 28px; font-size: 14px; }
+
+/* ── INPUTS ── */
+.input {
+  background: var(--lk-deep);
+  border: 1px solid var(--lk-subtle);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--lk-white);
+  font-family: var(--font-body);
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.input:focus { border-color: var(--lk-pink); }
+.input::placeholder { color: var(--lk-muted); }
+
+/* ── CARDS ── */
+.card {
+  background: var(--lk-void);
+  border: 1px solid var(--lk-subtle);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+/* ── LOADING SPINNER ── */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--lk-subtle);
+  border-top-color: var(--lk-pink);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 40px auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── GRAIN OVERLAY ── */
+.grain::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  z-index: 9999;
+  opacity: 0.4;
+}
