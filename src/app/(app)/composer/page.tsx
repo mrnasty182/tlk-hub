@@ -1,265 +1,365 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
+import { useState } from 'react'
+import SongEditor from '@/components/SongEditor'
+import SongArranger from '@/components/SongArranger'
+import DrummerGrid from '@/components/DrummerGrid'
+import BassTab from '@/components/BassTab'
+import RehearsalMode from '@/components/RehearsalMode'
+import PatternLibrary from '@/components/PatternLibrary'
+import ScaleExplorer from '@/components/ScaleExplorer'
+import ChordPanel from '@/components/ChordPanel'
 
-export default function Composer() {
-  const [chordProgression, setChordProgression] = useState<string[]>(['I', 'IV', 'V', 'I']);
-  const [selectedKey, setSelectedKey] = useState('C');
+type ComposerTab = 'songwriter' | 'drums' | 'bass' | 'rehearsal'
 
-  const keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const progressions = [
-    { name: 'I - IV - V - I', chords: ['I', 'IV', 'V', 'I'] },
-    { name: 'I - V - vi - IV', chords: ['I', 'V', 'vi', 'IV'] },
-    { name: 'ii - V - I', chords: ['ii', 'V', 'I'] },
-    { name: 'I - vi - IV - V', chords: ['I', 'vi', 'IV', 'V'] },
-  ];
+const DEMO_SONG_CONTENT = `{title: Stay Hard}
+{artist: The Loin Kings}
+{key: A}
+{bpm: 124}
 
-  const applyProgression = (prog: typeof progressions[0]) => {
-    setChordProgression([...prog.chords]);
-  };
+[intro]
+A  E  F#m  D
+
+[verse]
+A         E
+We don't stop the party here
+F#m       D
+We ride until the morning comes
+
+[chorus]
+D  A  E  F#m
+Stay hard, stay loud
+D  A  E  F#m
+We are the lion kings`
+
+const DEMO_REHEARSAL_DATA = {
+  title: 'Demo Song',
+  artist: 'The Loin Kings',
+  bpm: 120,
+  timeSignature: '4/4' as const,
+  sections: [
+    { id: 's1', name: 'Intro', type: 'intro' as const, bars: 4, startBar: 0 },
+    { id: 's2', name: 'Verse 1', type: 'verse' as const, bars: 8, startBar: 4 },
+    { id: 's3', name: 'Chorus', type: 'chorus' as const, bars: 8, startBar: 12 },
+  ],
+  chordProgression: [
+    { bar: 1, chord: 'A' },
+    { bar: 2, chord: 'E' },
+    { bar: 3, chord: 'F#m' },
+    { bar: 4, chord: 'D' },
+    { bar: 5, chord: 'A' },
+    { bar: 6, chord: 'E' },
+    { bar: 7, chord: 'F#m' },
+    { bar: 8, chord: 'D' },
+    { bar: 9, chord: 'D' },
+    { bar: 10, chord: 'A' },
+    { bar: 11, chord: 'E' },
+    { bar: 12, chord: 'F#m' },
+    { bar: 13, chord: 'D' },
+    { bar: 14, chord: 'A' },
+    { bar: 15, chord: 'E' },
+    { bar: 16, chord: 'F#m' },
+  ],
+}
+
+export default function ComposerPage() {
+  const [activeTab, setActiveTab] = useState<ComposerTab>('songwriter')
+  const [songContent, setSongContent] = useState(DEMO_SONG_CONTENT)
+  const [selectedChord, setSelectedChord] = useState<string>('A')
+  const [drumPatternData, setDrumPatternData] = useState<any>(null)
+  const [showPatternLibrary, setShowPatternLibrary] = useState(false)
+
+  const tabs: { id: ComposerTab; label: string }[] = [
+    { id: 'songwriter', label: '✍️ Songwriter' },
+    { id: 'drums', label: '🥁 Drums' },
+    { id: 'bass', label: '🎸 Bass' },
+    { id: 'rehearsal', label: '🎤 Rehearsal' },
+  ]
 
   return (
     <div className="composer-page">
-      <header className="page-header">
-        <div>
-          <h1 className="page-title">Composer Tools</h1>
-          <p className="page-subtitle">Write and develop your songs</p>
-        </div>
-      </header>
-
-      <div className="composer-grid">
-        <section className="composer-card">
-          <h2 className="card-title">🎼 Key Selector</h2>
-          <div className="key-grid">
-            {keys.map(key => (
-              <button
-                key={key}
-                className={`key-btn ${selectedKey === key ? 'active' : ''}`}
-                onClick={() => setSelectedKey(key)}
-              >
-                {key}
-              </button>
-            ))}
-          </div>
-          <div className="selected-key-display">
-            <span className="key-label">Current Key:</span>
-            <span className="key-value">{selectedKey} Major</span>
-          </div>
-        </section>
-
-        <section className="composer-card">
-          <h2 className="card-title">📊 Chord Progressions</h2>
-          <div className="progression-list">
-            {progressions.map((prog, i) => (
-              <button 
-                key={i} 
-                className="progression-btn"
-                onClick={() => applyProgression(prog)}
-              >
-                <span className="prog-name">{prog.name}</span>
-                <span className="prog-chords">{prog.chords.join(' → ')}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="composer-card progression-display">
-          <h2 className="card-title">Current Progression</h2>
-          <div className="chord-display">
-            {chordProgression.map((chord, i) => (
-              <div key={i} className="chord-box">
-                <span className="chord-numeral">{chord}</span>
-                <span className="chord-name">{selectedKey}{chord.replace(/[IVXi]/g, (m: string) => {
-                  const map: Record<string, string> = { 'I': '', 'ii': 'm', 'IV': '', 'V': '', 'vi': 'm', 'III': '', 'VII': '' };
-                  return map[m] || '';
-                })}</span>
-              </div>
-            ))}
-          </div>
-          <div className="chord-actions">
-            <button className="btn btn-ghost btn-sm" onClick={() => setChordProgression([...chordProgression, 'I'])}>
-              + Add Chord
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setChordProgression(chordProgression.slice(0, -1))}>
-              - Remove
-            </button>
-          </div>
-        </section>
-
-        <section className="composer-card">
-          <h2 className="card-title">✍️ Lyric Ideas</h2>
-          <textarea 
-            className="lyric-input"
-            placeholder="Start writing your lyrics here..."
-            rows={8}
-          ></textarea>
-          <div className="lyric-actions">
-            <button className="btn btn-primary btn-sm">Save Draft</button>
-            <button className="btn btn-ghost btn-sm">Clear</button>
-          </div>
-        </section>
-      </div>
-
       <style>{`
         .composer-page {
-          padding: 32px;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
         }
-        .page-header {
+        .composer-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 32px;
+          padding: 20px 32px 0;
+          flex-shrink: 0;
         }
-        .page-title {
+        .composer-title {
           font-family: var(--font-display);
-          font-size: 36px;
-          margin-bottom: 4px;
-        }
-        .page-subtitle {
-          color: var(--lk-muted);
-          font-size: 14px;
-        }
-        .composer-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 24px;
-        }
-        .composer-card {
-          background: var(--lk-void);
-          border: 1px solid var(--lk-subtle);
-          border-radius: 16px;
-          padding: 24px;
-        }
-        .card-title {
-          font-family: var(--font-heading);
-          font-size: 16px;
-          letter-spacing: 1px;
-          margin-bottom: 20px;
-        }
-        .key-grid {
-          display: grid;
-          grid-template-columns: repeat(6, 1fr);
-          gap: 8px;
-          margin-bottom: 20px;
-        }
-        .key-btn {
-          padding: 12px;
-          background: var(--lk-deep);
-          border: 1px solid var(--lk-subtle);
-          border-radius: 8px;
-          color: var(--lk-muted);
-          font-family: var(--font-mono);
-          font-size: 14px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-        .key-btn:hover {
-          border-color: var(--lk-pink);
+          font-size: 32px;
+          letter-spacing: 2px;
           color: var(--lk-white);
+          margin: 0;
         }
-        .key-btn.active {
-          background: var(--lk-pink);
-          border-color: var(--lk-pink);
-          color: var(--lk-black);
-        }
-        .selected-key-display {
+        .tab-bar {
           display: flex;
-          justify-content: space-between;
-          padding: 16px;
-          background: var(--lk-deep);
-          border-radius: 8px;
+          gap: 4px;
+          margin-top: 16px;
+          border-bottom: 1px solid var(--lk-subtle);
+          padding: 0 32px;
+          flex-shrink: 0;
         }
-        .key-label {
-          color: var(--lk-muted);
-          font-size: 13px;
-        }
-        .key-value {
-          font-family: var(--font-mono);
-          color: var(--lk-gold);
-        }
-        .progression-list {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .progression-btn {
-          display: flex;
-          justify-content: space-between;
-          padding: 16px;
-          background: var(--lk-deep);
-          border: 1px solid var(--lk-subtle);
-          border-radius: 8px;
-          cursor: pointer;
-          transition: all 0.15s;
-          text-align: left;
-        }
-        .progression-btn:hover {
-          border-color: var(--lk-teal);
-        }
-        .prog-name {
+        .tab-btn {
+          padding: 12px 24px;
           font-family: var(--font-heading);
-          font-size: 14px;
-          color: var(--lk-white);
-        }
-        .prog-chords {
-          font-family: var(--font-mono);
           font-size: 12px;
-          color: var(--lk-teal);
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          color: var(--lk-muted);
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
+          position: relative;
+          border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
         }
-        .progression-display {
-          grid-column: span 2;
+        .tab-btn:hover {
+          color: var(--lk-white);
         }
-        .chord-display {
-          display: flex;
-          gap: 16px;
-          margin-bottom: 20px;
+        .tab-btn.active {
+          color: var(--lk-pink);
+          border-bottom-color: var(--lk-pink);
         }
-        .chord-box {
+        .tab-content {
           flex: 1;
+          overflow: hidden;
+        }
+        .songwriter-layout {
+          display: grid;
+          grid-template-columns: 1fr 1fr 300px;
+          height: 100%;
+          gap: 0;
+          overflow: hidden;
+        }
+        .songwriter-left {
           display: flex;
           flex-direction: column;
+          overflow: hidden;
+          border-right: 1px solid var(--lk-subtle);
+        }
+        .songwriter-center {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          border-right: 1px solid var(--lk-subtle);
+        }
+        .songwriter-right {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          background: var(--lk-void);
+        }
+        .panel-section {
+          padding: 20px;
+          border-bottom: 1px solid var(--lk-subtle);
+          flex-shrink: 0;
+        }
+        .panel-section-title {
+          font-family: var(--font-heading);
+          font-size: 11px;
+          letter-spacing: 2px;
+          text-transform: uppercase;
+          color: var(--lk-muted);
+          margin: 0 0 12px;
+        }
+        .panel-scroll {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0 20px 20px;
+        }
+        .drums-layout {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .drums-topbar {
+          display: flex;
           align-items: center;
-          padding: 24px;
-          background: linear-gradient(135deg, rgba(123,47,190,0.2), rgba(255,45,155,0.1));
-          border: 1px solid var(--lk-violet);
-          border-radius: 12px;
-        }
-        .chord-numeral {
-          font-family: var(--font-display);
-          font-size: 36px;
-          color: var(--lk-pink);
-          margin-bottom: 4px;
-        }
-        .chord-name {
-          font-family: var(--font-mono);
-          font-size: 14px;
-          color: var(--lk-teal);
-        }
-        .chord-actions {
-          display: flex;
-          gap: 12px;
-        }
-        .lyric-input {
-          width: 100%;
+          gap: 16px;
+          padding: 16px 24px;
+          border-bottom: 1px solid var(--lk-subtle);
           background: var(--lk-deep);
-          border: 1px solid var(--lk-subtle);
-          border-radius: 8px;
-          padding: 16px;
-          color: var(--lk-white);
-          font-family: var(--font-body);
-          font-size: 14px;
-          resize: vertical;
-          margin-bottom: 16px;
+          flex-shrink: 0;
         }
-        .lyric-input:focus {
-          outline: none;
-          border-color: var(--lk-pink);
+        .drums-grid-wrapper {
+          flex: 1;
+          overflow: auto;
+          padding: 20px;
         }
-        .lyric-actions {
+        .bass-layout {
+          height: 100%;
           display: flex;
-          gap: 12px;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .bass-topbar {
+          padding: 16px 24px;
+          border-bottom: 1px solid var(--lk-subtle);
+          background: var(--lk-deep);
+          flex-shrink: 0;
+        }
+        .bass-grid-wrapper {
+          flex: 1;
+          overflow: auto;
+          padding: 20px;
+        }
+        .rehearsal-wrapper {
+          height: 100%;
+          overflow: hidden;
+        }
+        .chord-tap-hint {
+          font-family: var(--font-mono);
+          font-size: 11px;
+          color: var(--lk-muted);
+          padding: 8px 12px;
+          background: var(--lk-deep);
+          border-radius: 6px;
+          margin-bottom: 12px;
+          text-align: center;
         }
       `}</style>
+
+      <header className="composer-header">
+        <h1 className="composer-title">Composer Tools</h1>
+      </header>
+
+      <nav className="tab-bar">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      <div className="tab-content">
+        {activeTab === 'songwriter' && (
+          <div className="songwriter-layout">
+            <div className="songwriter-left">
+              <div className="panel-section">
+                <p className="panel-section-title">Song Editor</p>
+                <div className="chord-tap-hint">Click any chord in the editor to highlight it</div>
+              </div>
+              <div style={{ flex: 1, overflow: 'auto', padding: '0 20px 20px' }}>
+                <SongEditor
+                  initialContent={songContent}
+                  onSave={(content) => setSongContent(content)}
+                  onChordTap={(chord) => setSelectedChord(chord)}
+                />
+              </div>
+            </div>
+            <div className="songwriter-center">
+              <div className="panel-section">
+                <p className="panel-section-title">Song Arranger</p>
+              </div>
+              <div style={{ flex: 1, overflow: 'auto' }}>
+                <SongArranger
+                  content={songContent}
+                  onChordClick={(chord) => setSelectedChord(chord)}
+                />
+              </div>
+            </div>
+            <div className="songwriter-right">
+              <div className="panel-section">
+                <p className="panel-section-title">Scale Explorer</p>
+              </div>
+              <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 16px' }}>
+                <ScaleExplorer
+                  autoRoot={selectedChord.replace(/[0-9]/g, '').replace('m', '').replace('M', '') || 'A'}
+                  onChordTap={(chord) => setSelectedChord(chord)}
+                />
+              </div>
+              <div style={{ borderTop: '1px solid var(--lk-subtle)' }}>
+                <div className="panel-section">
+                  <p className="panel-section-title">Chord Reference</p>
+                </div>
+                <div style={{ padding: '0 16px 16px' }}>
+                  <ChordPanel
+                    chord={selectedChord}
+                    autoRoot={selectedChord.replace(/[0-9]/g, '').replace('m', '').replace('M', '') || 'A'}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'drums' && (
+          <div className="drums-layout">
+            <div className="drums-topbar">
+              <span style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: 12,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                color: 'var(--lk-muted)',
+              }}>Drum Pattern Editor</span>
+              <div style={{ flex: 1 }} />
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => setShowPatternLibrary(true)}
+              >
+                📚 Pattern Library
+              </button>
+            </div>
+            <div className="drums-grid-wrapper">
+              <DrummerGrid
+                initialData={drumPatternData}
+                onChange={(data) => setDrumPatternData(data)}
+              />
+            </div>
+            <PatternLibrary
+              isOpen={showPatternLibrary}
+              onClose={() => setShowPatternLibrary(false)}
+              currentPattern={drumPatternData || undefined}
+              onLoadPattern={(data) => setDrumPatternData(data)}
+            />
+          </div>
+        )}
+
+        {activeTab === 'bass' && (
+          <div className="bass-layout">
+            <div className="bass-topbar">
+              <span style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: 12,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                color: 'var(--lk-muted)',
+              }}>Bass Tab Editor</span>
+            </div>
+            <div className="bass-grid-wrapper">
+              <BassTab />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'rehearsal' && (
+          <div className="rehearsal-wrapper">
+            <RehearsalMode
+              title={DEMO_REHEARSAL_DATA.title}
+              artist={DEMO_REHEARSAL_DATA.artist}
+              bpm={DEMO_REHEARSAL_DATA.bpm}
+              timeSignature={DEMO_REHEARSAL_DATA.timeSignature}
+              sections={DEMO_REHEARSAL_DATA.sections}
+              chordProgression={DEMO_REHEARSAL_DATA.chordProgression}
+            />
+          </div>
+        )}
+      </div>
     </div>
-  );
+  )
 }
