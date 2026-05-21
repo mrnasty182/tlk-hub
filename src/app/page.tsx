@@ -126,7 +126,6 @@ export default function TLKHub() {
             <div className="editor-container">
               <h2>Song Editor</h2>
               <SongEditor
-                onChordTap={handleChordTap}
                 onSave={(content) => console.log('Saving song:', content)}
               />
             </div>

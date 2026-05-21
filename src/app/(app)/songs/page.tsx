@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import SongEditor from '@/components/SongEditor'
+import SongEditor, { type SongData } from '@/components/SongEditor'
 import SongArranger from '@/components/SongArranger'
 import DrummerGrid from '@/components/DrummerGrid'
 import BassTab from '@/components/BassTab'
@@ -151,16 +151,16 @@ export default function SongsPage() {
 
   const handleSongSelect = (song: DemoSong) => {
     setSelectedSong(song)
-    setSongContent(song.content)
     setViewTab('edit')
     setDrumPatternData(null)
   }
 
-  const handleContentChange = (content: string) => {
-    setSongContent(content)
-    if (selectedSong) {
-      setSelectedSong({ ...selectedSong, content })
-    }
+  const handleContentChange = (_content: string) => {
+    // SongEditor now uses structured SongData — this legacy callback is unused in the new UI
+  }
+
+  const handleSongSave = (_song: SongData) => {
+    // Structured save — handled by SongEditor internally, noop here since songs page doesn't track structured song data
   }
 
   const viewTabs: { id: SongViewTab; label: string }[] = [
@@ -513,8 +513,7 @@ export default function SongsPage() {
                     <div className="edit-pane">
                       <SongEditor
                         initialContent={songContent}
-                        onSave={handleContentChange}
-                        onChordTap={() => {}}
+                        onSave={handleSongSave}
                       />
                     </div>
                     <div className="arranger-pane">
