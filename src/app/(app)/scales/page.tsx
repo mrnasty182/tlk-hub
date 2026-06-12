@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import GuitarScalesPage from '@/components/GuitarScales'
-import AudioRecorder from '@/components/AudioRecorder'
+import RiffAnalyzer from '@/components/RiffAnalyzer'
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -331,8 +331,8 @@ export default function ScalesPage() {
         {activeTab === 'riff' && (
           <div>
             <h2 style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 32, color: BRAND.hotPink, letterSpacing: 4, margin: '0 0 8px' }}>RIFF ANALYZER</h2>
-            <p style={{ color: BRAND.muted, fontSize: 14, margin: '0 0 32px', maxWidth: 600 }}>Play a riff on your guitar. The analyzer will detect the musical key and BPM from your recording.</p>
-            <AudioRecorder />
+            <p style={{ color: BRAND.muted, fontSize: 14, margin: '0 0 32px', maxWidth: 600 }}>Play a riff on your guitar. The analyzer will detect the musical note and pitch from your microphone in real time.</p>
+            <RiffAnalyzer />
           </div>
         )}
       </div>

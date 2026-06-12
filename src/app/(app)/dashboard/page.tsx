@@ -257,7 +257,7 @@ export default function DashboardPage() {
     <div style={{
       minHeight: '100vh',
       background: BRAND.midnight,
-      padding: '48px',
+      padding: '24px 16px',
     }}>
       <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
         {/* Header */}
@@ -353,7 +353,7 @@ export default function DashboardPage() {
               textTransform: 'uppercase',
             }}>View All →</Link>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', md: { gridTemplateColumns: 'repeat(2, 1fr)' }, lg: { gridTemplateColumns: 'repeat(3, 1fr)' } }}>
             {recentSongs.length > 0 ? recentSongs.map(song => (
               <SongItem
                 key={song.id}

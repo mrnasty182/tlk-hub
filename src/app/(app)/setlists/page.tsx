@@ -145,7 +145,7 @@ export default function SetlistsPage() {
   return (
     <div style={{ minHeight: '100vh', background: BRAND.midnight }}>
       {/* Header */}
-      <div style={{ padding: '40px 48px 24px', borderBottom: `1px solid ${BRAND.border}` }}>
+      <div style={{ padding: '24px 16px 20px', borderBottom: `1px solid ${BRAND.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
             <h1 style={{ fontFamily: 'Bebas Neue, Impact, sans-serif', fontSize: 48, letterSpacing: 4, color: BRAND.hotPink, margin: 0 }}>
@@ -185,7 +185,7 @@ export default function SetlistsPage() {
       </div>
 
       {/* Setlists grid */}
-      <div style={{ padding: '32px 48px', maxWidth: 1400, margin: '0 auto' }}>
+      <div style={{ padding: '24px 16px', maxWidth: 1400, margin: '0 auto' }}>
         {savedSetlists.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
             <div style={{ fontSize: 64, marginBottom: 20 }}>🎸</div>
