@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { loadSetlists, saveSetlist, deleteSetlist as apiDeleteSetlist, migrateLocalStorageSetlistsToSupabase } from '@/lib/setlistsApi'
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -440,15 +442,27 @@ export default function SetlistBuilder({
     setSetlistItems([])
   }
 
-  const handleSave = () => {
+  // ── Auth & setlist sync ────────────────────────────────────────────────────────
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUserId(session.user.id)
+      }
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // ── Save ───────────────────────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
     if (setlistItems.length === 0) {
       alert('Add some songs to your setlist first!')
       return
     }
-
-    const savedSetlists: SavedSetlist[] = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) || '[]'
-    )
 
     const newSetlist: SavedSetlist = {
       id: initialSetlist?.id || Date.now().toString(),
@@ -458,16 +472,25 @@ export default function SetlistBuilder({
       createdAt: initialSetlist?.createdAt || Date.now(),
     }
 
+    // Always save to localStorage
+    const savedSetlists: SavedSetlist[] = JSON.parse(
+      localStorage.getItem(STORAGE_KEY) || '[]'
+    )
     let updated: SavedSetlist[]
     if (initialSetlist?.id) {
       updated = savedSetlists.map(s => (s.id === initialSetlist.id ? newSetlist : s))
     } else {
       updated = [newSetlist, ...savedSetlists]
     }
-
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+
+    // Also save to Supabase if logged in
+    if (userId) {
+      await saveSetlist(newSetlist, userId)
+    }
+
     alert(`Setlist "${setlistName}" saved!`)
-  }
+  }, [setlistItems, setlistName, totalDurationMinutes, initialSetlist, userId])
 
   const handleDoubleClick = (songId: string) => {
     router.push(`/composer?songId=${songId}`)

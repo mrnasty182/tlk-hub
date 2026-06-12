@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import SetlistBuilder from '@/components/SetlistBuilder'
 import ShowModeModal from '@/components/ShowModeModal'
+import { supabase } from '@/lib/supabase'
+import { loadSetlists, saveSetlist, deleteSetlist as apiDeleteSetlist, migrateLocalStorageSetlistsToSupabase } from '@/lib/setlistsApi'
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -57,21 +59,47 @@ export default function SetlistsPage() {
   const [editingSetlist, setEditingSetlist] = useState<SavedSetlist | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [showModeSetlist, setShowModeSetlist] = useState<SavedSetlist | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
 
-  const loadSetlists = () => {
+  // ── Auth ─────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUserId(session.user.id)
+      } else {
+        setUserId(null)
+      }
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // ── Load setlists ───────────────────────────────────────────────────────────
+  useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        setSavedSetlists(JSON.parse(stored))
-      } catch {
-        setSavedSetlists([])
+
+    if (userId) {
+      loadSetlists(userId).then(supabaseSetlists => {
+        const local: SavedSetlist[] = stored ? JSON.parse(stored) : []
+        // Merge: Supabase wins for duplicates
+        const mergedMap = new Map<string, SavedSetlist>()
+        ;[...local, ...supabaseSetlists].forEach(s => mergedMap.set(s.id, s))
+        const merged = Array.from(mergedMap.values())
+        setSavedSetlists(merged)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+      })
+    } else {
+      if (stored) {
+        try {
+          setSavedSetlists(JSON.parse(stored))
+        } catch {
+          setSavedSetlists([])
+        }
       }
     }
-  }
-
-  useEffect(() => {
-    loadSetlists()
-  }, [])
+  }, [userId])
 
   const handleEditSetlist = (setlist: SavedSetlist) => {
     setEditingSetlist(setlist)
@@ -86,7 +114,11 @@ export default function SetlistsPage() {
   const handleBackToLibrary = () => {
     setEditingSetlist(null)
     setIsCreating(false)
-    loadSetlists()
+    // Reload from localStorage (will be refreshed on next mount)
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      try { setSavedSetlists(JSON.parse(stored)) } catch { setSavedSetlists([]) }
+    }
   }
 
   const handleDeleteSetlist = (id: string) => {
@@ -94,6 +126,7 @@ export default function SetlistsPage() {
     const updated = savedSetlists.filter(s => s.id !== id)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
     setSavedSetlists(updated)
+    if (userId) apiDeleteSetlist(id, userId)
   }
 
   // Edit or create mode
