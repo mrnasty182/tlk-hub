@@ -1,703 +1,656 @@
-'use client'
+'use client';
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState } from 'react';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+type SectionType = 'Intro' | 'Verse' | 'Pre-Chorus' | 'Chorus' | 'Bridge' | 'Solo' | 'Outro';
 
-export interface SongArrangerProps {
-  /** Full ChordPro content including metadata and sections */
-  content: string
-  onChordClick?: (chord: string) => void
+interface ArrangementSection {
+  id: string;
+  type: SectionType;
+  key: string;
+  bpm: number;
+  bars: number;
 }
 
-interface ParsedSection {
-  type: 'section' | 'chords' | 'lyrics' | 'blank' | 'comment' | 'meta'
-  content: string
-  sectionType?: string // intro | verse | chorus | bridge | outro | solo
-  metaKey?: string
-  metaValue?: string
+interface SongMeta {
+  title: string;
+  key: string;
+  bpm: number;
 }
 
-interface SectionBlock {
-  type: string
-  lines: ParsedSection[]
-}
+const KEYS = ['A', 'A#', 'Bb', 'B', 'C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab'];
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+const BRAND = {
+  hotPink: '#FF2D9B',
+  electricTeal: '#00E5CC',
+  deepViolet: '#7B2FBE',
+  glamGold: '#F0C040',
+  midnight: '#08060F',
+  muted: '#6B6180',
+  surface: '#130E20',
+  card: '#0E0B18',
+};
 
-const SECTION_COLORS: Record<string, string> = {
-  intro:   'var(--lk-violet)',
-  verse:   'var(--lk-pink)',
-  chorus:  'var(--lk-teal)',
-  bridge:  'var(--lk-gold)',
-  outro:   'var(--lk-pink-glow)',
-  solo:    'var(--lk-violet-mid)',
-  prechorus: 'var(--lk-muted)',
-  tag:     'var(--lk-muted)',
-}
+const SECTION_COLORS: Record<SectionType, string> = {
+  Intro: '#7B2FBE',
+  Verse: '#00E5CC',
+  'Pre-Chorus': '#FF2D9B',
+  Chorus: '#F0C040',
+  Bridge: '#FF6B35',
+  Solo: '#9D4EDD',
+  Outro: '#06D6A0',
+};
 
-const SECTION_LABELS: Record<string, string> = {
-  intro:   'INTRO',
-  verse:   'VERSE',
-  chorus:  'CHORUS',
-  bridge:  'BRIDGE',
-  outro:   'OUTRO',
-  solo:    'SOLO',
-  prechorus: 'PRE-CHORUS',
-  tag:     'TAG',
-}
+const SECTION_TYPES: SectionType[] = ['Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Bridge', 'Solo', 'Outro'];
 
-// ── Parser ─────────────────────────────────────────────────────────────────────
+const DEMO_ARRANGEMENT: ArrangementSection[] = [
+  { id: '1', type: 'Intro', key: 'A', bpm: 124, bars: 4 },
+  { id: '2', type: 'Verse', key: 'A', bpm: 124, bars: 4 },
+  { id: '3', type: 'Chorus', key: 'A', bpm: 124, bars: 4 },
+  { id: '4', type: 'Verse', key: 'A', bpm: 124, bars: 4 },
+  { id: '5', type: 'Chorus', key: 'A', bpm: 124, bars: 4 },
+  { id: '6', type: 'Bridge', key: 'D', bpm: 124, bars: 4 },
+  { id: '7', type: 'Chorus', key: 'A', bpm: 124, bars: 8 },
+];
 
-function parseChordPro(content: string): { meta: Record<string, string>, blocks: SectionBlock[] } {
-  const lines = content.split('\n')
-  const meta: Record<string, string> = {}
-  const blocks: SectionBlock[] = []
-  let currentBlock: SectionBlock | null = null
+function generateChordPro(meta: SongMeta, sections: ArrangementSection[]): string {
+  const lines: string[] = [];
+  lines.push(`{title: ${meta.title}}`);
+  lines.push(`{key: ${meta.key}}`);
+  lines.push(`{bpm: ${meta.bpm}}`);
+  lines.push('');
 
-  for (const raw of lines) {
-    const line = raw.trimEnd()
-
-    // Metadata: {key: value}
-    const metaMatch = line.match(/^\{(\w+):\s*(.+)\}\}$/)
-    if (metaMatch) {
-      meta[metaMatch[1].toLowerCase()] = metaMatch[2].trim()
-      continue
+  for (const section of sections) {
+    lines.push(`[${section.type}]`);
+    for (let b = 0; b < section.bars; b++) {
+      const beat = b % 4 === 0 ? '1' : '';
+      lines.push(`|${section.key}    |    |    |    |`);
     }
-
-    // Comment: # ...
-    if (line.startsWith('#')) {
-      if (currentBlock) {
-        currentBlock.lines.push({ type: 'comment', content: line.slice(1).trim() })
-      } else {
-        blocks.push({ type: 'comment', lines: [{ type: 'comment', content: line.slice(1).trim() }] })
-      }
-      continue
-    }
-
-    // Section marker: [sectionname]
-    const sectionMatch = line.match(/^\[(\w+)\](?:\s*(.*))?$/)
-    if (sectionMatch) {
-      if (currentBlock) blocks.push(currentBlock)
-      const sectionType = sectionMatch[1].toLowerCase()
-      currentBlock = {
-        type: sectionType,
-        lines: [{
-          type: 'section',
-          content: sectionMatch[2] || sectionType,
-          sectionType,
-        }],
-      }
-      continue
-    }
-
-    // Chord line
-    if (isChordLine(line)) {
-      if (currentBlock) {
-        currentBlock.lines.push({ type: 'chords', content: line })
-      } else {
-        // Orphan chord line — wrap in verse
-        currentBlock = { type: 'verse', lines: [] }
-        currentBlock.lines.push({ type: 'chords', content: line })
-      }
-      continue
-    }
-
-    // Lyrics line
-    if (line.trim()) {
-      if (currentBlock) {
-        currentBlock.lines.push({ type: 'lyrics', content: line })
-      } else {
-        currentBlock = { type: 'verse', lines: [] }
-        currentBlock.lines.push({ type: 'lyrics', content: line })
-      }
-      continue
-    }
-
-    // Blank line
-    if (currentBlock) {
-      currentBlock.lines.push({ type: 'blank', content: '' })
-    }
+    lines.push('');
   }
 
-  if (currentBlock) blocks.push(currentBlock)
-  return { meta, blocks }
+  return lines.join('\n');
 }
 
-function isChordLine(line: string): boolean {
-  const tokens = line.trim().split(/\s+/)
-  if (tokens.length === 0) return false
-  // A line is a chord line if all tokens look like chords
-  const chordPattern = /^([A-G][#b]?)(m|maj|min|dim|aug|sus|add|7|9|11|13|M)*[A-Gb#]?$/
-  return tokens.every(t => chordPattern.test(t))
-}
+export default function SongArranger() {
+  const [meta, setMeta] = useState<SongMeta>({ title: 'Stay Hard', key: 'A', bpm: 124 });
+  const [sections, setSections] = useState<ArrangementSection[]>(DEMO_ARRANGEMENT);
 
-// ── ChordChip component ───────────────────────────────────────────────────────
+  const addSection = (type: SectionType) => {
+    const newSection: ArrangementSection = {
+      id: Date.now().toString(),
+      type,
+      key: meta.key,
+      bpm: meta.bpm,
+      bars: 4,
+    };
+    setSections([...sections, newSection]);
+  };
 
-interface ChordChipProps {
-  chord: string
-  onClick?: (chord: string) => void
-}
+  const removeSection = (index: number) => {
+    setSections(sections.filter((_, i) => i !== index));
+  };
 
-function ChordChip({ chord, onClick }: ChordChipProps) {
+  const moveSection = (index: number, direction: -1 | 1) => {
+    const newIndex = index + direction;
+    if (newIndex < 0 || newIndex >= sections.length) return;
+    const updated = [...sections];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    setSections(updated);
+  };
+
+  const updateSection = (index: number, field: keyof ArrangementSection, value: string | number) => {
+    setSections(
+      sections.map((s, i) =>
+        i === index ? { ...s, [field]: field === 'key' ? value : Number(value) } : s
+      )
+    );
+  };
+
+  const handleCopyChordPro = () => {
+    const chordPro = generateChordPro(meta, sections);
+    navigator.clipboard.writeText(chordPro).then(() => {
+      alert('ChordPro copied to clipboard!');
+    });
+  };
+
+  const handleSave = () => {
+    console.log('Saved song:', { meta, sections });
+    alert('Song saved successfully!');
+  };
+
+  const chordProPreview = generateChordPro(meta, sections);
+
   return (
-    <span
-      className="song-arranger-chip"
-      onClick={() => onClick?.(chord)}
-      title={`${chord} — click to see fingering`}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        backgroundColor: BRAND.midnight,
+        color: '#fff',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        padding: '24px',
+        boxSizing: 'border-box',
+      }}
     >
-      {chord}
-    </span>
-  )
-}
+      {/* Header */}
+      <div style={{ marginBottom: '20px' }}>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: '28px',
+            fontWeight: 700,
+            color: BRAND.hotPink,
+            letterSpacing: '1px',
+          }}
+        >
+          SONG ARRANGER
+        </h1>
+      </div>
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+      {/* Song Metadata */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '16px',
+          alignItems: 'center',
+          marginBottom: '20px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ color: BRAND.muted, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            Song Title
+          </label>
+          <input
+            type="text"
+            value={meta.title}
+            onChange={(e) => setMeta({ ...meta, title: e.target.value })}
+            style={{
+              backgroundColor: BRAND.card,
+              border: `1px solid ${BRAND.deepViolet}`,
+              borderRadius: '6px',
+              color: '#fff',
+              padding: '8px 12px',
+              fontSize: '14px',
+              width: '200px',
+              outline: 'none',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ color: BRAND.muted, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            Key
+          </label>
+          <select
+            value={meta.key}
+            onChange={(e) => setMeta({ ...meta, key: e.target.value })}
+            style={{
+              backgroundColor: BRAND.card,
+              border: `1px solid ${BRAND.deepViolet}`,
+              borderRadius: '6px',
+              color: '#fff',
+              padding: '8px 12px',
+              fontSize: '14px',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {KEYS.map((k) => (
+              <option key={k} value={k} style={{ backgroundColor: BRAND.card }}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <label style={{ color: BRAND.muted, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+            BPM
+          </label>
+          <input
+            type="number"
+            value={meta.bpm}
+            onChange={(e) => setMeta({ ...meta, bpm: Number(e.target.value) })}
+            style={{
+              backgroundColor: BRAND.card,
+              border: `1px solid ${BRAND.deepViolet}`,
+              borderRadius: '6px',
+              color: '#fff',
+              padding: '8px 12px',
+              fontSize: '14px',
+              width: '80px',
+              outline: 'none',
+            }}
+          />
+        </div>
+      </div>
 
-export default function SongArranger({ content, onChordClick }: SongArrangerProps) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+      {/* Main content: two-column */}
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          gap: '20px',
+          minHeight: 0,
+        }}
+      >
+        {/* Left panel: section library */}
+        <div
+          style={{
+            flex: '0 0 35%',
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: BRAND.surface,
+            borderRadius: '12px',
+            border: `1px solid ${BRAND.deepViolet}40`,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              padding: '16px',
+              borderBottom: `1px solid ${BRAND.deepViolet}40`,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: '14px',
+                fontWeight: 600,
+                color: BRAND.electricTeal,
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+              }}
+            >
+              Section Library
+            </h2>
+            <p style={{ margin: '8px 0 0', fontSize: '12px', color: BRAND.muted }}>
+              Click to add to arrangement
+            </p>
+          </div>
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
+            {SECTION_TYPES.map((type) => (
+              <button
+                key={type}
+                onClick={() => addSection(type)}
+                style={{
+                  backgroundColor: `${SECTION_COLORS[type]}20`,
+                  border: `2px solid ${SECTION_COLORS[type]}`,
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  color: SECTION_COLORS[type],
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  transition: 'background-color 0.15s, transform 0.1s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = `${SECTION_COLORS[type]}40`;
+                  e.currentTarget.style.transform = 'translateX(4px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = `${SECTION_COLORS[type]}20`;
+                  e.currentTarget.style.transform = 'translateX(0)';
+                }}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+        </div>
 
-  // Auto-inject styles once on mount
-  useEffect(() => {
-    injectSongArrangerStyles()
-  }, [])
+        {/* Right panel: arrangement */}
+        <div
+          style={{
+            flex: '0 0 65%',
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: BRAND.surface,
+            borderRadius: '12px',
+            border: `1px solid ${BRAND.deepViolet}40`,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              padding: '16px',
+              borderBottom: `1px solid ${BRAND.deepViolet}40`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontSize: '14px',
+                fontWeight: 600,
+                color: BRAND.hotPink,
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+              }}
+            >
+              Song Structure
+            </h2>
+            <span style={{ fontSize: '12px', color: BRAND.muted }}>
+              {sections.length} section{sections.length !== 1 ? 's' : ''}
+            </span>
+          </div>
 
-  const { meta, blocks } = useMemo(() => parseChordPro(content), [content])
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '12px',
+            }}
+          >
+            {sections.length === 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                  color: BRAND.muted,
+                  fontSize: '14px',
+                  textAlign: 'center',
+                  padding: '20px',
+                }}
+              >
+                <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.5 }}>🎸</div>
+                Click a section type to add it to your song
+              </div>
+            ) : (
+              sections.map((section, index) => (
+                <div
+                  key={section.id}
+                  style={{
+                    backgroundColor: BRAND.card,
+                    border: `1px solid ${BRAND.deepViolet}60`,
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {/* Section type pill */}
+                  <div
+                    style={{
+                      backgroundColor: SECTION_COLORS[section.type],
+                      borderRadius: '20px',
+                      padding: '4px 12px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#fff',
+                      textTransform: 'uppercase',
+                      letterSpacing: '1px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {section.type}
+                  </div>
 
-  const toggleSection = (idx: number) => {
-    setCollapsed(prev => {
-      const next = new Set(prev)
-      if (next.has(String(idx))) next.delete(String(idx))
-      else next.add(String(idx))
-      return next
-    })
-  }
+                  {/* Key dropdown */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: BRAND.muted }}>Key:</label>
+                    <select
+                      value={section.key}
+                      onChange={(e) => updateSection(index, 'key', e.target.value)}
+                      style={{
+                        backgroundColor: BRAND.surface,
+                        border: `1px solid ${BRAND.deepViolet}60`,
+                        borderRadius: '4px',
+                        color: BRAND.glamGold,
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {KEYS.map((k) => (
+                        <option key={k} value={k} style={{ backgroundColor: BRAND.card }}>
+                          {k}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-  const title    = meta.title   || ''
-  const artist   = meta.artist  || ''
-  const key      = meta.key     || ''
-  const bpm      = meta.bpm     || ''
-  const timeSig  = meta.t       || ''
+                  {/* BPM input */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: BRAND.muted }}>BPM:</label>
+                    <input
+                      type="number"
+                      value={section.bpm}
+                      onChange={(e) => updateSection(index, 'bpm', e.target.value)}
+                      style={{
+                        backgroundColor: BRAND.surface,
+                        border: `1px solid ${BRAND.deepViolet}60`,
+                        borderRadius: '4px',
+                        color: BRAND.electricTeal,
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        width: '60px',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
 
-  return (
-    <div className="song-arranger">
-      {/* ── Song Header ── */}
-      {(title || artist || key || bpm) && (
-        <div className="sa-header">
-          {title && <h1 className="sa-title">{title}</h1>}
-          {artist && <p className="sa-artist">{artist}</p>}
-          <div className="sa-meta-row">
-            {key && (
-              <span className="sa-meta-badge">
-                <span className="sa-meta-label">Key</span>
-                <span className="sa-meta-value">{key}</span>
-              </span>
-            )}
-            {bpm && (
-              <span className="sa-meta-badge">
-                <span className="sa-meta-label">BPM</span>
-                <span className="sa-meta-value">{bpm}</span>
-              </span>
-            )}
-            {timeSig && (
-              <span className="sa-meta-badge">
-                <span className="sa-meta-label">Time</span>
-                <span className="sa-meta-value">{timeSig}</span>
-              </span>
+                  {/* Bars input */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <label style={{ fontSize: '11px', color: BRAND.muted }}>Bars:</label>
+                    <input
+                      type="number"
+                      value={section.bars}
+                      onChange={(e) => updateSection(index, 'bars', e.target.value)}
+                      min={1}
+                      style={{
+                        backgroundColor: BRAND.surface,
+                        border: `1px solid ${BRAND.deepViolet}60`,
+                        borderRadius: '4px',
+                        color: '#fff',
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        width: '50px',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+
+                  {/* Spacer */}
+                  <div style={{ flex: 1 }} />
+
+                  {/* Reorder buttons */}
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => moveSection(index, -1)}
+                      disabled={index === 0}
+                      style={{
+                        background: 'none',
+                        border: `1px solid ${BRAND.deepViolet}60`,
+                        borderRadius: '4px',
+                        color: index === 0 ? BRAND.muted : BRAND.electricTeal,
+                        cursor: index === 0 ? 'not-allowed' : 'pointer',
+                        padding: '4px 8px',
+                        fontSize: '14px',
+                        lineHeight: 1,
+                        transition: 'background-color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (index !== 0) e.currentTarget.style.backgroundColor = `${BRAND.electricTeal}20`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => moveSection(index, 1)}
+                      disabled={index === sections.length - 1}
+                      style={{
+                        background: 'none',
+                        border: `1px solid ${BRAND.deepViolet}60`,
+                        borderRadius: '4px',
+                        color: index === sections.length - 1 ? BRAND.muted : BRAND.electricTeal,
+                        cursor: index === sections.length - 1 ? 'not-allowed' : 'pointer',
+                        padding: '4px 8px',
+                        fontSize: '14px',
+                        lineHeight: 1,
+                        transition: 'background-color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (index !== sections.length - 1)
+                          e.currentTarget.style.backgroundColor = `${BRAND.electricTeal}20`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      ↓
+                    </button>
+                  </div>
+
+                  {/* Remove button */}
+                  <button
+                    onClick={() => removeSection(index)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: BRAND.muted,
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      transition: 'color 0.15s, background-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = BRAND.hotPink;
+                      e.currentTarget.style.backgroundColor = `${BRAND.hotPink}20`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = BRAND.muted;
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))
             )}
           </div>
         </div>
-      )}
-
-      {/* ── Section Blocks ── */}
-      <div className="sa-blocks">
-        {blocks.map((block, blockIdx) => {
-          const isCommentOnly = block.type === 'comment'
-          const color = SECTION_COLORS[block.type] || 'var(--lk-muted)'
-          const label = SECTION_LABELS[block.type] || block.type.toUpperCase()
-          const isCollapsed = collapsed.has(String(blockIdx))
-
-          if (isCommentOnly) {
-            return (
-              <div key={blockIdx} className="sa-block sa-block--comment">
-                {block.lines.map((line, lineIdx) => (
-                  <span key={lineIdx} className="sa-comment">{line.content}</span>
-                ))}
-              </div>
-            )
-          }
-
-          return (
-            <div
-              key={blockIdx}
-              className={`sa-block sa-block--${block.type}`}
-              style={{ '--section-color': color } as React.CSSProperties}
-            >
-              {/* Section Header (clickable) */}
-              <button
-                className="sa-section-header"
-                onClick={() => toggleSection(blockIdx)}
-                style={{ color }}
-              >
-                <span className="sa-section-label" style={{ color }}>{label}</span>
-                {block.lines[0]?.content && block.lines[0].content !== block.type && (
-                  <span className="sa-section-name">{block.lines[0].content}</span>
-                )}
-                <span className={`sa-collapse-icon ${isCollapsed ? 'sa-collapse-icon--collapsed' : ''}`}>
-                  {isCollapsed ? '▼' : '▲'}
-                </span>
-              </button>
-
-              {/* Section Content (collapsible) */}
-              {!isCollapsed && (
-                <div className="sa-section-content">
-                  <SectionLines lines={block.lines.slice(1)} onChordClick={onChordClick} />
-                </div>
-              )}
-            </div>
-          )
-        })}
       </div>
-    </div>
-  )
-}
 
-// ── Render Line ────────────────────────────────────────────────────────────────
-
-function RenderLine({ line, onChordClick }: { line: ParsedSection; onChordClick?: (c: string) => void }) {
-  if (line.type === 'blank') {
-    return <div className="sa-blank-line" />
-  }
-
-  if (line.type === 'comment') {
-    return <div className="sa-comment-line">{line.content}</div>
-  }
-
-  if (line.type === 'chords') {
-    const chords = line.content.split(/\s+/).filter(Boolean)
-    return (
-      <div className="sa-chord-line">
-        {chords.map((chord, idx) => (
-          <ChordChip key={idx} chord={chord} onClick={onChordClick} />
-        ))}
-      </div>
-    )
-  }
-
-  if (line.type === 'lyrics') {
-    return (
-      <div className="sa-lyrics-line">
-        <span>{line.content}</span>
-      </div>
-    )
-  }
-
-  return null
-}
-
-// ── Section Lines ──────────────────────────────────────────────────────────────
-// Renders lines with chord-lyric pairing (chord line followed by its lyric line)
-
-function SectionLines({ lines, onChordClick }: { lines: ParsedSection[]; onChordClick?: (c: string) => void }) {
-  const elements: React.ReactNode[] = []
-  let i = 0
-
-  while (i < lines.length) {
-    const line = lines[i]
-
-    // If we have a chord line followed by a lyrics line, render as a pair
-    if (line.type === 'chords' && i + 1 < lines.length && lines[i + 1].type === 'lyrics') {
-      elements.push(
-        <ChordLyricPair
-          key={`pair-${i}`}
-          chordLine={line.content}
-          lyricLine={lines[i + 1].content}
-          onChordClick={onChordClick}
-        />
-      )
-      i += 2
-      continue
-    }
-
-    // Otherwise render individually
-    elements.push(<RenderLine key={`line-${i}`} line={line} onChordClick={onChordClick} />)
-    i++
-  }
-
-  return <>{elements}</>
-}
-
-// ── Chord-Lyric Pair Component ─────────────────────────────────────────────────
-// Renders a chord line followed immediately by its lyric line with alignment
-
-interface ChordLyricPairProps {
-  chordLine: string
-  lyricLine: string
-  onChordClick?: (chord: string) => void
-}
-
-export function ChordLyricPair({ chordLine, lyricLine, onChordClick }: ChordLyricPairProps) {
-  const chords = chordLine.trim().split(/\s+/).filter(Boolean)
-  const words  = lyricLine.trim().split(/(\s+)/) // keep whitespace tokens
-
-  // Simple equal-division placement: spread chords across the lyric line
-  // For better accuracy, map chords to syllable positions
-  const chordPositions = distributeChordsOverWords(chords, words)
-
-  return (
-    <div className="sa-chord-lyric-pair">
-      {/* Chord row */}
-      <div className="sa-chord-row">
-        {chordPositions.map((pos, idx) => (
-          <span
-            key={idx}
-            className="sa-chord-placed"
-            style={{ '--col-start': pos.col, '--col-span': pos.span } as React.CSSProperties}
+      {/* Preview area */}
+      <div
+        style={{
+          marginTop: '20px',
+          backgroundColor: BRAND.surface,
+          borderRadius: '12px',
+          border: `1px solid ${BRAND.deepViolet}40`,
+          padding: '16px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '12px',
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: '14px',
+              fontWeight: 600,
+              color: BRAND.glamGold,
+              textTransform: 'uppercase',
+              letterSpacing: '1px',
+            }}
           >
-            <ChordChip chord={pos.chord} onClick={onChordClick} />
-          </span>
-        ))}
-      </div>
-      {/* Lyric row */}
-      <div className="sa-lyric-row">
-        {words.map((word, idx) => (
-          <span key={idx} className="sa-lyric-word">{word}</span>
-        ))}
+            ChordPro Preview
+          </h2>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={handleCopyChordPro}
+              style={{
+                backgroundColor: `${BRAND.deepViolet}`,
+                border: 'none',
+                borderRadius: '6px',
+                color: '#fff',
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'background-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = BRAND.hotPink;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = BRAND.deepViolet;
+              }}
+            >
+              Copy ChordPro
+            </button>
+            <button
+              onClick={handleSave}
+              style={{
+                backgroundColor: BRAND.hotPink,
+                border: 'none',
+                borderRadius: '6px',
+                color: '#fff',
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'background-color 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#ff5bac';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = BRAND.hotPink;
+              }}
+            >
+              Save Song
+            </button>
+          </div>
+        </div>
+        <pre
+          style={{
+            margin: 0,
+            backgroundColor: BRAND.card,
+            borderRadius: '8px',
+            padding: '16px',
+            fontSize: '13px',
+            fontFamily: '"Space Mono", "Courier New", monospace',
+            color: BRAND.electricTeal,
+            overflowX: 'auto',
+            whiteSpace: 'pre-wrap',
+            border: `1px solid ${BRAND.deepViolet}30`,
+          }}
+        >
+          {chordProPreview}
+        </pre>
       </div>
     </div>
-  )
-}
-
-interface ChordPosition {
-  chord: string
-  col: number  // grid column start (1-indexed)
-  span: number
-}
-
-function distributeChordsOverWords(chords: string[], words: string[]): ChordPosition[] {
-  const wordCount = words.filter(w => w.trim()).length
-  if (chords.length === 0 || wordCount === 0) return []
-
-  // Distribute chords as evenly as possible across words
-  const positions: ChordPosition[] = []
-  const step = wordCount / chords.length
-
-  chords.forEach((chord, idx) => {
-    const startWord = Math.floor(idx * step)
-    const endWord   = Math.floor((idx + 1) * step)
-    const col = startWord + 1
-    const span = Math.max(1, endWord - startWord)
-    positions.push({ chord, col, span })
-  })
-
-  return positions
-}
-
-// ── Styles ─────────────────────────────────────────────────────────────────────
-
-/*
-  Styles injected via a <style> tag since we can't rely on CSS modules here.
-  Mirrors globals.css design language: dark glam, neon accents, premium card look.
-*/
-
-const STYLES = `
-.song-arranger {
-  --sa-chip-bg:    var(--lk-deep);
-  --sa-chip-border: var(--lk-teal);
-  --sa-chip-color:  var(--lk-teal);
-  --sa-chip-hover-bg: var(--lk-teal);
-  --sa-chip-hover-color: var(--lk-black);
-
-  font-family: var(--font-body);
-  color: var(--lk-white);
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 32px 24px;
-}
-
-/* ── Header ── */
-.sa-header {
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--lk-subtle);
-}
-
-.sa-title {
-  font-family: var(--font-display);
-  font-size: 48px;
-  letter-spacing: 3px;
-  color: var(--lk-white);
-  margin: 0 0 4px;
-  line-height: 1;
-}
-
-.sa-artist {
-  font-family: var(--font-heading);
-  font-size: 14px;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--lk-muted);
-  margin: 0 0 16px;
-}
-
-.sa-meta-row {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.sa-meta-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: var(--lk-deep);
-  border: 1px solid var(--lk-subtle);
-  border-radius: 20px;
-}
-
-.sa-meta-label {
-  font-family: var(--font-heading);
-  font-size: 10px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--lk-muted);
-}
-
-.sa-meta-value {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--lk-teal);
-}
-
-/* ── Blocks ── */
-.sa-blocks {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.sa-block {
-  background: var(--lk-void);
-  border: 1px solid var(--lk-subtle);
-  border-radius: 12px;
-  overflow: hidden;
-  transition: border-color 0.2s;
-}
-
-.sa-block:hover {
-  border-color: var(--section-color, var(--lk-subtle));
-}
-
-.sa-block--comment {
-  background: transparent;
-  border: none;
-  border-radius: 0;
-}
-
-/* ── Section Header ── */
-.sa-section-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 14px 20px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  border-bottom: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.sa-block:not(.sa-block--comment):hover .sa-section-header {
-  background: rgba(255,255,255,0.03);
-}
-
-.sa-section-header:hover {
-  border-bottom-color: var(--section-color, var(--lk-subtle));
-}
-
-.sa-section-label {
-  font-family: var(--font-heading);
-  font-size: 11px;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  font-weight: 600;
-  opacity: 0.7;
-}
-
-.sa-section-name {
-  font-family: var(--font-body);
-  font-size: 13px;
-  color: var(--lk-white);
-  opacity: 0.6;
-  font-style: italic;
-}
-
-.sa-collapse-icon {
-  margin-left: auto;
-  font-size: 10px;
-  opacity: 0.5;
-  transition: transform 0.2s;
-}
-
-.sa-collapse-icon--collapsed {
-  transform: rotate(-90deg);
-}
-
-/* ── Section Content ── */
-.sa-section-content {
-  padding: 16px 20px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-/* ── Chord Line ── */
-.sa-chord-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 0 2px;
-  min-height: 32px;
-  align-items: center;
-}
-
-/* ── Chord Lyric Pair ── */
-.sa-chord-lyric-pair {
-  display: flex;
-  flex-direction: column;
-}
-
-.sa-chord-row {
-  display: flex;
-  gap: 0;
-  padding: 0 0 2px;
-  min-height: 28px;
-  align-items: flex-end;
-  position: relative;
-}
-
-.sa-chord-placed {
-  display: inline-flex;
-  align-items: flex-end;
-  padding: 0 2px;
-}
-
-.sa-lyric-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  padding: 2px 0;
-  font-size: 16px;
-  line-height: 1.8;
-}
-
-.sa-lyric-word {
-  padding: 0 4px;
-  white-space: pre-wrap;
-}
-
-/* ── Chord Chip ── */
-.song-arranger-chip {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 10px;
-  background: var(--sa-chip-bg);
-  border: 1px solid var(--sa-chip-border);
-  border-radius: 4px;
-  color: var(--sa-chip-color);
-  cursor: pointer;
-  transition: all 0.15s;
-  user-select: none;
-}
-
-.song-arranger-chip:hover {
-  background: var(--sa-chip-hover-bg);
-  color: var(--sa-chip-hover-color);
-  border-color: var(--sa-chip-hover-bg);
-}
-
-/* ── Lyrics Line ── */
-.sa-lyrics-line {
-  font-size: 15px;
-  color: var(--lk-white);
-  padding: 3px 0;
-  line-height: 1.7;
-  opacity: 0.9;
-}
-
-/* ── Blank & Comment ── */
-.sa-blank-line {
-  height: 16px;
-}
-
-.sa-comment-line {
-  font-size: 12px;
-  color: var(--lk-muted);
-  font-style: italic;
-  padding: 4px 0;
-}
-
-.sa-comment {
-  font-size: 12px;
-  color: var(--lk-muted);
-  font-style: italic;
-}
-
-/* ── Section-specific accent lines ── */
-.sa-block--verse .sa-section-header { border-left: 3px solid var(--lk-pink); }
-.sa-block--chorus .sa-section-header { border-left: 3px solid var(--lk-teal); }
-.sa-block--bridge .sa-section-header { border-left: 3px solid var(--lk-gold); }
-.sa-block--intro .sa-section-header { border-left: 3px solid var(--lk-violet); }
-.sa-block--outro .sa-section-header { border-left: 3px solid var(--lk-pink-glow); }
-.sa-block--solo .sa-section-header { border-left: 3px solid var(--lk-violet-mid); }
-.sa-block--prechorus .sa-section-header { border-left: 3px solid var(--lk-muted); }
-.sa-block--tag .sa-section-header { border-left: 3px solid var(--lk-muted); }
-
-/* ── Print Styles ── */
-@media print {
-  .song-arranger {
-    background: white;
-    color: black;
-    max-width: 100%;
-    padding: 0;
-  }
-  .sa-block {
-    border: 1px solid #ccc;
-    break-inside: avoid;
-  }
-  .sa-section-header {
-    background: #f5f5f5 !important;
-  }
-  .song-arranger-chip {
-    background: #f0f0f0;
-    border-color: #999;
-    color: black;
-  }
-  .sa-chord-row {
-    min-height: 20px;
-  }
-  .sa-lyric-row {
-    font-size: 14px;
-  }
-  .sa-collapse-icon {
-    display: none;
-  }
-  .sa-header {
-    border-bottom-color: #ccc;
-  }
-}
-`
-
-export function injectSongArrangerStyles() {
-  if (typeof document === 'undefined') return
-  if (document.getElementById('song-arranger-styles')) return
-  const style = document.createElement('style')
-  style.id = 'song-arranger-styles'
-  style.textContent = STYLES
-  document.head.appendChild(style)
+  );
 }

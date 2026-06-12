@@ -1,327 +1,445 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import Link from 'next/link';
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { getStoredSongs, getStoredEvents, DEFAULT_EVENTS, type StoredSong, type StoredEvent } from '@/lib/dashboardData'
 
-export default function Dashboard() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+const BRAND = {
+  hotPink: '#FF2D9B',
+  electricTeal: '#00E5CC',
+  deepViolet: '#7B2FBE',
+  glamGold: '#F0C040',
+  midnight: '#08060F',
+  muted: '#6B6180',
+  surface: '#130E20',
+  card: '#0E0B18',
+}
+
+interface StatCardProps {
+  value: string | number
+  label: string
+  accent: string
+}
+
+function StatCard({ value, label, accent }: StatCardProps) {
+  return (
+    <div style={{
+      background: BRAND.card,
+      borderRadius: '12px',
+      padding: '24px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+      position: 'relative',
+      overflow: 'hidden',
+      minWidth: '180px',
+      flex: 1,
+    }}>
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: '4px',
+        background: accent,
+      }} />
+      <span style={{
+        fontFamily: '"Bebas Neue", sans-serif',
+        fontSize: '48px',
+        color: accent,
+        lineHeight: 1,
+      }}>{value}</span>
+      <span style={{
+        fontFamily: '"Oswald", sans-serif',
+        fontSize: '10px',
+        textTransform: 'uppercase',
+        letterSpacing: '1px',
+        color: BRAND.muted,
+      }}>{label}</span>
+    </div>
+  )
+}
+
+interface EventCardProps {
+  title: string
+  date: string
+  time: string
+  venue?: string
+  link?: string
+  countdown: string
+  accent: string
+}
+
+function EventCard({ title, date, time, venue, link, countdown, accent }: EventCardProps) {
+  return (
+    <div style={{
+      background: BRAND.card,
+      borderRadius: '12px',
+      padding: '20px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{
+          fontFamily: '"Oswald", sans-serif',
+          fontSize: '10px',
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          color: accent,
+        }}>{title}</span>
+      </div>
+      <span style={{
+        fontFamily: '"Bebas Neue", sans-serif',
+        fontSize: '24px',
+        color: '#fff',
+      }}>{date}</span>
+      <span style={{
+        fontFamily: '"Oswald", sans-serif',
+        fontSize: '14px',
+        color: BRAND.muted,
+      }}>{time}</span>
+      {venue && (
+        <span style={{
+          fontFamily: '"Oswald", sans-serif',
+          fontSize: '12px',
+          color: BRAND.muted,
+        }}>{venue}</span>
+      )}
+      {link && (
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontFamily: '"Space Mono", monospace',
+            fontSize: '11px',
+            color: BRAND.electricTeal,
+            textDecoration: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
+          🔗 Join Jam
+        </a>
+      )}
+      <div style={{
+        marginTop: '8px',
+        padding: '6px 12px',
+        background: `${accent}20`,
+        borderRadius: '20px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        width: 'fit-content',
+      }}>
+        <span style={{
+          fontFamily: '"Oswald", sans-serif',
+          fontSize: '11px',
+          color: accent,
+        }}>{countdown}</span>
+      </div>
+    </div>
+  )
+}
+
+interface SongItemProps {
+  title: string
+  keySig: string
+  bpm: number
+  genre?: string
+  onClick?: () => void
+}
+
+function SongItem({ title, keySig, bpm, genre, onClick }: SongItemProps) {
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        padding: '12px 16px',
+        background: BRAND.card,
+        borderRadius: '10px',
+        border: '1px solid #1E1830',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'border-color 0.15s',
+      }}
+      onMouseEnter={e => { if (onClick) (e.currentTarget as HTMLElement).style.borderColor = BRAND.hotPink }}
+      onMouseLeave={e => { if (onClick) (e.currentTarget as HTMLElement).style.borderColor = '#1E1830' }}
+    >
+      <div style={{ flex: 1 }}>
+        <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: '14px', color: '#fff', letterSpacing: '0.5px' }}>{title}</span>
+        {genre && <span style={{ fontFamily: '"Space Mono", monospace', fontSize: '10px', color: BRAND.muted, marginLeft: '8px' }}>{genre}</span>}
+      </div>
+      <span style={{ fontFamily: '"Space Mono", monospace', fontSize: '11px', color: BRAND.electricTeal, marginRight: '16px' }}>{keySig}</span>
+      <span style={{ fontFamily: '"Space Mono", monospace', fontSize: '11px', color: BRAND.glamGold }}>{bpm}</span>
+    </div>
+  )
+}
+
+interface QuickActionProps {
+  icon: string
+  label: string
+  onClick: () => void
+  primary?: boolean
+}
+
+function QuickAction({ icon, label, onClick, primary }: QuickActionProps) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        padding: '10px 20px',
+        background: primary ? BRAND.hotPink : hover ? `${BRAND.hotPink}40` : 'transparent',
+        border: `1px solid ${hover ? BRAND.hotPink : BRAND.muted}`,
+        borderRadius: '50px',
+        color: primary ? '#fff' : hover ? BRAND.hotPink : '#fff',
+        fontFamily: '"Oswald", sans-serif',
+        fontSize: '13px',
+        letterSpacing: '0.5px',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+      }}
+    >
+      <span>{icon}</span>
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function getCountdown(dateStr: string): string {
+  const now = new Date()
+  const eventDate = new Date(dateStr)
+  const diff = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  if (diff < 0) return 'Past'
+  if (diff === 0) return 'Today!'
+  if (diff === 1) return 'Tomorrow'
+  return `${diff} days away`
+}
+
+function formatEventDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export default function DashboardPage() {
+  const router = useRouter()
+  const [songs, setSongs] = useState<StoredSong[]>([])
+  const [events, setEvents] = useState<StoredEvent[]>([])
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      setLoading(false);
-    };
-    getUser();
-  }, []);
+    const storedSongs = getStoredSongs()
+    const storedEvents = getStoredEvents()
+    setSongs(storedSongs)
+    setEvents(storedEvents.length > 0 ? storedEvents : DEFAULT_EVENTS)
+  }, [])
 
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const streakData = [
-    { day: 'Mon', completed: true },
-    { day: 'Tue', completed: true },
-    { day: 'Wed', completed: true },
-    { day: 'Thu', completed: false },
-    { day: 'Fri', completed: true },
-    { day: 'Sat', completed: true },
-    { day: 'Sun', completed: true },
-  ];
+  const upcomingRehearsals = events.filter(e => e.type === 'rehearsal')
+  const upcomingGigs = events.filter(e => e.type === 'gig')
+  const nextRehearsal = upcomingRehearsals.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
+  const nextGig = upcomingGigs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
 
-  if (loading) {
-    return <div className="page-loading"><div className="spinner"></div></div>;
-  }
+  const recentSongs = songs.slice(0, 5)
+
+  const handleAddSong = () => router.push('/composer')
+  const handleSchedule = () => router.push('/calendar')
+  const handleBuildSetlist = () => router.push('/setlists')
 
   return (
-    <div className="dashboard">
-      <header className="page-header">
-        <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">Welcome back, {user?.user_metadata?.full_name || 'King'}</p>
-        </div>
-        <Link href="/songs/new" className="btn btn-primary">
-          <span>+</span> Add Song
-        </Link>
-      </header>
+    <div style={{
+      minHeight: '100vh',
+      background: BRAND.midnight,
+      padding: '48px',
+    }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        {/* Header */}
+        <header style={{ marginBottom: '40px' }}>
+          <h1 style={{
+            fontFamily: '"Bebas Neue", sans-serif',
+            fontSize: '48px',
+            color: BRAND.hotPink,
+            margin: 0,
+            lineHeight: 1,
+          }}>DASHBOARD</h1>
+          <p style={{
+            fontFamily: '"Oswald", sans-serif',
+            fontSize: '14px',
+            color: BRAND.muted,
+            margin: '8px 0 0',
+            letterSpacing: '1px',
+          }}>The Loin Kings — {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+        </header>
 
-      <div className="dashboard-grid">
-        <section className="dashboard-card streak-card">
-          <div className="card-header">
-            <h2 className="card-title">🔥 Practice Streak</h2>
-            <span className="streak-count">5 days</span>
+        {/* Stat Cards */}
+        <section style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            <StatCard value={songs.length} label="Total Songs" accent={BRAND.hotPink} />
+            <StatCard value={upcomingGigs.length} label="Upcoming Gigs" accent={BRAND.electricTeal} />
+            <StatCard value={upcomingRehearsals.length} label="Rehearsals This Month" accent={BRAND.deepViolet} />
+            <StatCard value={0} label="Total Sets" accent={BRAND.glamGold} />
           </div>
-          <div className="streak-visual">
-            <div className="flame-icon">🔥</div>
-            <div className="streak-label">Keep it going!</div>
-          </div>
-          <div className="week-grid">
-            {streakData.map((d, i) => (
-              <div key={i} className={`day-cell ${d.completed ? 'completed' : ''}`}>
-                <span className="day-name">{d.day}</span>
-                <div className="day-dot"></div>
+        </section>
+
+        {/* Upcoming Events */}
+        <section style={{ marginBottom: '32px' }}>
+          <h2 style={{
+            fontFamily: '"Bebas Neue", sans-serif',
+            fontSize: '24px',
+            color: '#fff',
+            marginBottom: '16px',
+          }}>Upcoming</h2>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            {nextRehearsal ? (
+              <div style={{ flex: 1, minWidth: '280px' }}>
+                <EventCard
+                  title="Next Rehearsal"
+                  date={formatEventDate(nextRehearsal.date)}
+                  time={nextRehearsal.time}
+                  countdown={getCountdown(nextRehearsal.date)}
+                  accent={BRAND.deepViolet}
+                />
               </div>
-            ))}
+            ) : (
+              <div style={{ flex: 1, minWidth: '280px', background: BRAND.card, borderRadius: '12px', padding: '20px' }}>
+                <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: '12px', color: BRAND.muted, textTransform: 'uppercase', letterSpacing: '1px' }}>Next Rehearsal</span>
+                <p style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '18px', color: BRAND.muted, margin: '8px 0 0' }}>No rehearsals scheduled</p>
+                <button onClick={() => router.push('/calendar')} style={{ marginTop: '12px', padding: '8px 16px', background: BRAND.deepViolet + '30', border: `1px solid ${BRAND.deepViolet}`, borderRadius: '8px', color: BRAND.deepViolet, fontFamily: '"Oswald", sans-serif', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer' }}>+ Schedule Rehearsal</button>
+              </div>
+            )}
+            {nextGig ? (
+              <div style={{ flex: 1, minWidth: '280px' }}>
+                <EventCard
+                  title="Next Gig"
+                  date={formatEventDate(nextGig.date)}
+                  time={nextGig.time}
+                  venue={nextGig.venue}
+                  countdown={getCountdown(nextGig.date)}
+                  accent={BRAND.electricTeal}
+                />
+              </div>
+            ) : (
+              <div style={{ flex: 1, minWidth: '280px', background: BRAND.card, borderRadius: '12px', padding: '20px' }}>
+                <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: '12px', color: BRAND.muted, textTransform: 'uppercase', letterSpacing: '1px' }}>Next Gig</span>
+                <p style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '18px', color: BRAND.muted, margin: '8px 0 0' }}>No gigs scheduled</p>
+                <button onClick={() => router.push('/calendar')} style={{ marginTop: '12px', padding: '8px 16px', background: BRAND.electricTeal + '30', border: `1px solid ${BRAND.electricTeal}`, borderRadius: '8px', color: BRAND.electricTeal, fontFamily: '"Oswald", sans-serif', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer' }}>+ Add Gig</button>
+              </div>
+            )}
           </div>
         </section>
 
-        <section className="dashboard-card jam-banner">
-          <div className="jam-badge">NEXT JAM</div>
-          <h2 className="jam-title">Saturday Night Jam</h2>
-          <p className="jam-details">📅 Saturday, May 23rd @ 7:00 PM</p>
-          <p className="jam-details">📍 The Dungeon</p>
-          <div className="jam-actions">
-            <button className="btn btn-gold btn-sm">View Details</button>
-            <button className="btn btn-ghost btn-sm">Add to Calendar</button>
+        {/* Recent Songs */}
+        <section style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: '24px',
+              color: '#fff',
+              margin: 0,
+            }}>Recent Songs</h2>
+            <Link href="/songs" style={{
+              fontFamily: '"Oswald", sans-serif',
+              fontSize: '11px',
+              color: BRAND.hotPink,
+              textDecoration: 'none',
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+            }}>View All →</Link>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {recentSongs.length > 0 ? recentSongs.map(song => (
+              <SongItem
+                key={song.id}
+                title={song.title}
+                keySig={song.key}
+                bpm={song.bpm}
+                onClick={() => router.push('/composer')}
+              />
+            )) : (
+              <div style={{ padding: '24px', background: BRAND.card, borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ fontFamily: '"Oswald", sans-serif', fontSize: '14px', color: BRAND.muted, margin: '0 0 12px' }}>No songs yet</p>
+                <button onClick={handleAddSong} style={{ padding: '10px 20px', background: BRAND.hotPink, border: 'none', borderRadius: '8px', color: '#08060F', fontFamily: '"Oswald", sans-serif', fontSize: '12px', letterSpacing: '1px', textTransform: 'uppercase', cursor: 'pointer' }}>+ Add First Song</button>
+              </div>
+            )}
           </div>
         </section>
 
-        <section className="dashboard-card recent-songs">
-          <div className="card-header">
-            <h2 className="card-title">Recent Songs</h2>
-            <Link href="/songs" className="card-link">View all →</Link>
-          </div>
-          <div className="song-list">
-            <div className="song-item">
-              <span className="song-name">Thunderstruck</span>
-              <span className="song-band">AC/DC</span>
-              <span className="song-key">Em</span>
-            </div>
-            <div className="song-item">
-              <span className="song-name">Back in Black</span>
-              <span className="song-band">AC/DC</span>
-              <span className="song-key">Am</span>
-            </div>
-            <div className="song-item">
-              <span className="song-name">Highway to Hell</span>
-              <span className="song-band">AC/DC</span>
-              <span className="song-key">E</span>
-            </div>
-            <div className="song-item">
-              <span className="song-name">Pour Some Sugar on Me</span>
-              <span className="song-band">Def Leppard</span>
-              <span className="song-key">A</span>
-            </div>
+        {/* Quick Actions */}
+        <section style={{ marginBottom: '32px' }}>
+          <h2 style={{
+            fontFamily: '"Bebas Neue", sans-serif',
+            fontSize: '24px',
+            color: '#fff',
+            marginBottom: '16px',
+          }}>Quick Actions</h2>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <QuickAction
+              icon="📋"
+              label="+ New Song"
+              onClick={handleAddSong}
+            />
+            <QuickAction
+              icon="📅"
+              label="Schedule"
+              onClick={handleSchedule}
+            />
+            <QuickAction
+              icon="🎸"
+              label="Build Setlist"
+              onClick={handleBuildSetlist}
+              primary
+            />
+            <QuickAction
+              icon="✏️"
+              label="Compose"
+              onClick={() => router.push('/composer')}
+            />
+            <QuickAction
+              icon="🎹"
+              label="Scales"
+              onClick={() => router.push('/scales')}
+            />
           </div>
         </section>
 
-        <section className="dashboard-card quick-add">
-          <h2 className="card-title">Quick Add</h2>
-          <div className="quick-actions">
-            <Link href="/songs/new" className="quick-btn">
-              <span className="quick-icon">🎵</span>
-              <span>New Song</span>
-            </Link>
-            <Link href="/setlists/new" className="quick-btn">
-              <span className="quick-icon">📋</span>
-              <span>New Setlist</span>
-            </Link>
-            <Link href="/calendar" className="quick-btn">
-              <span className="quick-icon">📅</span>
-              <span>Schedule Jam</span>
-            </Link>
+        {/* Practice Stats */}
+        <section>
+          <h2 style={{
+            fontFamily: '"Bebas Neue", sans-serif',
+            fontSize: '24px',
+            color: '#fff',
+            marginBottom: '16px',
+          }}>Practice Stats</h2>
+          <div style={{
+            background: BRAND.card,
+            borderRadius: '12px',
+            padding: '24px',
+          }}>
+            <p style={{ fontFamily: '"Space Mono", monospace', fontSize: '12px', color: BRAND.muted, margin: '0 0 16px' }}>Practice tracking coming soon — log sessions in the calendar to see your progress here.</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: '10px', color: BRAND.muted, textTransform: 'uppercase' }}>Total Practice Time</span>
+                <p style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', color: BRAND.electricTeal, margin: '4px 0 0' }}>— hrs</p>
+              </div>
+              <div>
+                <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: '10px', color: BRAND.muted, textTransform: 'uppercase' }}>Sessions</span>
+                <p style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', color: BRAND.glamGold, margin: '4px 0 0' }}>0</p>
+              </div>
+              <div>
+                <span style={{ fontFamily: '"Oswald", sans-serif', fontSize: '10px', color: BRAND.muted, textTransform: 'uppercase' }}>Avg Duration</span>
+                <p style={{ fontFamily: '"Bebas Neue", sans-serif', fontSize: '24px', color: BRAND.deepViolet, margin: '4px 0 0' }}>— hrs</p>
+              </div>
+            </div>
           </div>
         </section>
       </div>
-
-      <style>{`
-        .dashboard {
-          padding: 32px;
-        }
-        .page-loading {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 32px;
-        }
-        .page-title {
-          font-family: var(--font-display);
-          font-size: 36px;
-          margin-bottom: 4px;
-        }
-        .page-subtitle {
-          color: var(--lk-muted);
-          font-size: 14px;
-        }
-        .dashboard-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 24px;
-        }
-        .dashboard-card {
-          background: var(--lk-void);
-          border: 1px solid var(--lk-subtle);
-          border-radius: 16px;
-          padding: 24px;
-        }
-        .card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-        .card-title {
-          font-family: var(--font-heading);
-          font-size: 16px;
-          letter-spacing: 1px;
-        }
-        .card-link {
-          color: var(--lk-teal);
-          font-size: 13px;
-        }
-        .card-link:hover {
-          text-decoration: underline;
-        }
-        .streak-card {
-          grid-column: span 1;
-        }
-        .streak-count {
-          font-family: var(--font-display);
-          font-size: 28px;
-          color: var(--lk-gold);
-        }
-        .streak-visual {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-          margin-bottom: 24px;
-        }
-        .flame-icon {
-          font-size: 48px;
-        }
-        .streak-label {
-          font-family: var(--font-heading);
-          font-size: 18px;
-          color: var(--lk-pink);
-        }
-        .week-grid {
-          display: flex;
-          justify-content: space-between;
-        }
-        .day-cell {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-        }
-        .day-name {
-          font-size: 11px;
-          color: var(--lk-muted);
-          text-transform: uppercase;
-        }
-        .day-dot {
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
-          background: var(--lk-subtle);
-          border: 2px solid transparent;
-        }
-        .day-cell.completed .day-dot {
-          background: linear-gradient(135deg, var(--lk-pink), var(--lk-violet));
-          border-color: var(--lk-pink);
-        }
-        .jam-banner {
-          background: linear-gradient(135deg, rgba(123,47,190,0.2), rgba(255,45,155,0.1));
-          border-color: rgba(123,47,190,0.3);
-          position: relative;
-          overflow: hidden;
-        }
-        .jam-badge {
-          position: absolute;
-          top: 0;
-          right: 0;
-          background: var(--lk-gold);
-          color: var(--lk-black);
-          font-family: var(--font-heading);
-          font-size: 10px;
-          padding: 6px 12px;
-          border-radius: 0 16px 0 8px;
-          letter-spacing: 2px;
-        }
-        .jam-title {
-          font-family: var(--font-heading);
-          font-size: 24px;
-          margin-bottom: 12px;
-        }
-        .jam-details {
-          color: var(--lk-muted);
-          font-size: 14px;
-          margin-bottom: 8px;
-        }
-        .jam-actions {
-          display: flex;
-          gap: 12px;
-          margin-top: 20px;
-        }
-        .song-list {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-        .song-item {
-          display: grid;
-          grid-template-columns: 1fr auto auto;
-          gap: 16px;
-          align-items: center;
-          padding: 12px 16px;
-          background: var(--lk-deep);
-          border-radius: 8px;
-          border: 1px solid var(--lk-subtle);
-        }
-        .song-name {
-          font-weight: 500;
-        }
-        .song-band {
-          color: var(--lk-muted);
-          font-size: 13px;
-        }
-        .song-key {
-          font-family: var(--font-mono);
-          font-size: 12px;
-          color: var(--lk-teal);
-          background: rgba(0,229,204,0.1);
-          padding: 4px 8px;
-          border-radius: 4px;
-        }
-        .quick-add .card-title {
-          margin-bottom: 20px;
-        }
-        .quick-actions {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 12px;
-        }
-        .quick-btn {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          padding: 20px;
-          background: var(--lk-deep);
-          border: 1px solid var(--lk-subtle);
-          border-radius: 12px;
-          transition: all 0.2s;
-          color: var(--lk-white);
-        }
-        .quick-btn:hover {
-          border-color: var(--lk-pink);
-          transform: translateY(-2px);
-        }
-        .quick-icon {
-          font-size: 28px;
-        }
-        .quick-btn span:last-child {
-          font-size: 12px;
-          font-family: var(--font-heading);
-          letter-spacing: 1px;
-        }
-      `}</style>
     </div>
-  );
+  )
 }
