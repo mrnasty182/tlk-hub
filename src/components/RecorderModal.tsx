@@ -53,10 +53,11 @@ export function deleteRecording(id: string): void {
 type Props = {
   open: boolean
   onClose: () => void
+  initialTab?: 'record' | 'recordings'
 }
 
-export default function RecorderModal({ open, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<'record' | 'recordings'>('record')
+export default function RecorderModal({ open, onClose, initialTab = 'record' }: Props) {
+  const [activeTab, setActiveTab] = useState<'record' | 'recordings'>(initialTab)
   const [recordings, setRecordings] = useState<SavedRecording[]>([])
   const [saveForm, setSaveForm] = useState<{ blob: Blob; url: string } | null>(null)
   const [recordingName, setRecordingName] = useState('')
@@ -70,6 +71,11 @@ export default function RecorderModal({ open, onClose }: Props) {
   useEffect(() => {
     if (open) setRecordings(loadRecordings())
   }, [open, activeTab])
+
+  // Sync activeTab when initialTab prop changes (e.g., switching from Record to Recordings button)
+  useEffect(() => {
+    setActiveTab(initialTab)
+  }, [initialTab])
 
   // Watch AudioRecorder for completion (state === 'done' + audioUrl)
   useEffect(() => {

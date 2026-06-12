@@ -150,9 +150,14 @@ export default function NewComposer() {
   const [focusMode, setFocusMode] = useState(false)
   const [showDrummerGrid, setShowDrummerGrid] = useState(false)
   const [showRecorder, setShowRecorder] = useState(false)
-  const [drummerBpm, setDrummerBpm] = useState(currentSong?.bpm ?? 120)
-  const [showBassTab, setShowBassTab] = useState(false)
-  const searchParams = useSearchParams()
+  const [showRecorder, setShowRecorder] = useState(false)
+    const [showHistory, setShowHistory] = useState(false)
+    const [songVersions, setSongVersions] = useState<any[]>([])
+    const [loadingVersions, setLoadingVersions] = useState(false)
+    const drummerBpm = useState(currentSong?.bpm ?? 120)[0]
+    const setDrummerBpm = useState(currentSong?.bpm ?? 120)[1]
+    const [showBassTab, setShowBassTab] = useState(false)
+    const searchParams = useSearchParams()
 
   // ── Auth flow ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -943,6 +948,9 @@ export default function NewComposer() {
             <button onClick={handleCopyChordPro} style={{ ...buttonStyle, color: copyConfirm ? BRAND.glamGold : '#fff' }}>
               {copyConfirm ? '✓ Copied!' : 'Copy Chord Pro'}
             </button>
+            <button onClick={() => { setShowRecordingsTab(true); setShowRecorder(true) }} style={{ ...buttonStyle, color: BRAND.electricTeal, borderColor: BRAND.electricTeal }}>
+              🎙 Recordings
+            </button>
             <button onClick={() => window.print()} style={{ ...buttonStyle, color: '#fff' }}>
               📄 Print PDF
             </button>
@@ -953,7 +961,7 @@ export default function NewComposer() {
         )}
       </div>
 
-      <RecorderModal open={showRecorder} onClose={() => setShowRecorder(false)} />
+      <RecorderModal open={showRecorder} onClose={() => { setShowRecorder(false); setShowRecordingsTab(false) }} initialTab={showRecordingsTab ? 'recordings' : 'record'} />
     </div>
   )
 }
