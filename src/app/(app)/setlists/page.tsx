@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import SetlistBuilder from '@/components/SetlistBuilder'
+import ShowModeModal from '@/components/ShowModeModal'
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -55,6 +56,7 @@ export default function SetlistsPage() {
   const [savedSetlists, setSavedSetlists] = useState<SavedSetlist[]>([])
   const [editingSetlist, setEditingSetlist] = useState<SavedSetlist | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [showModeSetlist, setShowModeSetlist] = useState<SavedSetlist | null>(null)
 
   const loadSetlists = () => {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -341,21 +343,66 @@ export default function SetlistsPage() {
 
                 {/* Edit hint */}
                 <div style={{
-                  fontFamily: 'Space Mono, monospace',
-                  fontSize: 10,
-                  color: BRAND.muted,
-                  letterSpacing: 1,
-                  textAlign: 'center',
+                  display: 'flex',
+                  gap: 8,
                   paddingTop: 16,
                   borderTop: `1px solid ${BRAND.border}`,
                 }}>
-                  Click to edit →
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleEditSetlist(setlist) }}
+                    style={{
+                      flex: 1,
+                      background: 'transparent',
+                      border: `1px solid ${BRAND.border}`,
+                      borderRadius: 6,
+                      color: BRAND.muted,
+                      padding: '8px 12px',
+                      fontFamily: 'Oswald, sans-serif',
+                      fontSize: 11,
+                      letterSpacing: 1.5,
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = BRAND.hotPink; (e.currentTarget as HTMLElement).style.color = BRAND.hotPink }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = BRAND.border; (e.currentTarget as HTMLElement).style.color = BRAND.muted }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowModeSetlist(setlist) }}
+                    disabled={setlist.items.length === 0}
+                    style={{
+                      flex: 1,
+                      background: setlist.items.length === 0 ? 'transparent' : BRAND.electricTeal + '22',
+                      border: `1px solid ${setlist.items.length === 0 ? BRAND.border : BRAND.electricTeal}`,
+                      borderRadius: 6,
+                      color: setlist.items.length === 0 ? BRAND.border : BRAND.electricTeal,
+                      padding: '8px 12px',
+                      fontFamily: 'Oswald, sans-serif',
+                      fontSize: 11,
+                      letterSpacing: 1.5,
+                      textTransform: 'uppercase',
+                      cursor: setlist.items.length === 0 ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { if (setlist.items.length > 0) { (e.currentTarget as HTMLElement).style.background = BRAND.electricTeal + '44'; (e.currentTarget as HTMLElement).style.borderColor = BRAND.electricTeal }}}
+                    onMouseLeave={e => { if (setlist.items.length > 0) { (e.currentTarget as HTMLElement).style.background = BRAND.electricTeal + '22'; (e.currentTarget as HTMLElement).style.borderColor = BRAND.electricTeal }}}
+                  >
+                    ▶ Show
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+      {showModeSetlist && (
+        <ShowModeModal
+          setlist={showModeSetlist}
+          onClose={() => setShowModeSetlist(null)}
+        />
+      )}
     </div>
   )
 }
