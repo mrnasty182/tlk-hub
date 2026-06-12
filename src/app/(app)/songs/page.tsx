@@ -92,7 +92,6 @@ export default function SongsPage() {
 
       {/* Songs grid */}
       <div style={{ padding: '32px 24px', maxWidth: 1200, margin: '0 auto' }}>
-        <h2 style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 32, color: BRAND.hotPink, letterSpacing: 4, margin: '0 0 8px' }}>ALL SONGS</h2>
         <p style={{ color: BRAND.muted, fontSize: 14, margin: '0 0 32px' }}>{songs.length} song{songs.length !== 1 ? 's' : ''} in your library</p>
 
         {songs.length === 0 ? (

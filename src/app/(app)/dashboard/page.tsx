@@ -360,7 +360,7 @@ export default function DashboardPage() {
                 title={song.title}
                 keySig={song.key}
                 bpm={song.bpm}
-                onClick={() => router.push('/composer')}
+                onClick={() => router.push(`/composer?songId=${song.id}`)}
               />
             )) : (
               <div style={{ padding: '24px', background: BRAND.card, borderRadius: '12px', textAlign: 'center' }}>

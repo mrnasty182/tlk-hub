@@ -13,8 +13,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [showCelebration, setShowCelebration] = useState(false)
   // Track prior user value to detect actual login vs token refresh
   const prevUserRef = useRef<User | null>(null)
+  // Guard against React StrictMode double-mount
+  const mountedRef = useRef(false)
 
   useEffect(() => {
+    // Skip if already mounted (StrictMode double-mount guard)
+    if (mountedRef.current) return
+    mountedRef.current = true
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       prevUserRef.current = session?.user ?? null
@@ -26,7 +32,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    return () => { mountedRef.current = false; subscription.unsubscribe() }
   }, [])
 
   // ── Celebration modal once per login — fire only on actual login, not every user state change ──
