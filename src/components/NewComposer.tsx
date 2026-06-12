@@ -150,14 +150,12 @@ export default function NewComposer() {
   const [focusMode, setFocusMode] = useState(false)
   const [showDrummerGrid, setShowDrummerGrid] = useState(false)
   const [showRecorder, setShowRecorder] = useState(false)
-  const [showRecorder, setShowRecorder] = useState(false)
-    const [showHistory, setShowHistory] = useState(false)
-    const [songVersions, setSongVersions] = useState<any[]>([])
-    const [loadingVersions, setLoadingVersions] = useState(false)
-    const drummerBpm = useState(currentSong?.bpm ?? 120)[0]
-    const setDrummerBpm = useState(currentSong?.bpm ?? 120)[1]
-    const [showBassTab, setShowBassTab] = useState(false)
-    const searchParams = useSearchParams()
+  const [showHistory, setShowHistory] = useState(false)
+  const [songVersions, setSongVersions] = useState<any[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [drummerBpm, setDrummerBpm] = useState(currentSong?.bpm ?? 120)
+  const [showBassTab, setShowBassTab] = useState(false)
+  const searchParams = useSearchParams()
 
   // ── Auth flow ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -285,8 +283,8 @@ export default function NewComposer() {
     localStorage.setItem('tlk-songs-v2', JSON.stringify(initialized))
   }
 
-  // ── Save songs ─────────────────────────────────────────────────────────────
-  const saveSongs = useCallback(async (updatedSongs: Song[]) => {
+  // ── Save songs (persistence only, no snapshot) ────────────────────────────
+  const persistSongs = useCallback(async (updatedSongs: Song[]) => {
     setSaveStatus('saving')
     localStorage.setItem('tlk-songs-v2', JSON.stringify(updatedSongs))
     setSongs(updatedSongs)
@@ -304,6 +302,66 @@ export default function NewComposer() {
     }
     setTimeout(() => setSaveStatus('idle'), 2000)
   }, [user, currentSong?.id])
+
+  // ── Song versioning ─────────────────────────────────────────────────────────
+  const snapshotVersion = useCallback(async () => {
+    if (!currentSong || !user) return
+    try {
+      await supabase.from('song_versions').insert({
+        song_id: currentSong.id,
+        user_id: user.id,
+        title: currentSong.title,
+        song_key: currentSong.key,
+        bpm: currentSong.bpm,
+        time_sig: currentSong.timeSig,
+        raw_lyrics: currentSong.rawLyrics,
+        sections: currentSong.sections,
+      })
+    } catch (e) {
+      console.error('Failed to snapshot version:', e)
+    }
+  }, [currentSong, user])
+
+  const loadSongVersions = useCallback(async () => {
+    if (!currentSong || !user) return
+    setLoadingVersions(true)
+    try {
+      const { data, error } = await supabase
+        .from('song_versions')
+        .select('*')
+        .eq('song_id', currentSong.id)
+        .order('created_at', { ascending: false })
+      if (!error && data) setSongVersions(data)
+    } catch (e) {
+      console.error('Failed to load versions:', e)
+    }
+    setLoadingVersions(false)
+  }, [currentSong, user])
+
+  const restoreVersion = (version: any) => {
+    if (!currentSong) return
+    const restored: Song = {
+      ...currentSong,
+      title: version.title,
+      key: version.song_key,
+      bpm: version.bpm,
+      timeSig: version.time_sig,
+      rawLyrics: version.raw_lyrics,
+      sections: version.sections,
+      updatedAt: Date.now(),
+    }
+    setCurrentSong(restored)
+    setWriteText(restored.rawLyrics || '')
+    const updatedSongs = songs.map(s => s.id === restored.id ? restored : s)
+    saveSongsWithSnapshot(updatedSongs)
+    setShowHistory(false)
+  }
+
+  // Wrap persistSongs to snapshot before saving
+  const saveSongsWithSnapshot = useCallback(async (updatedSongs: Song[]) => {
+    await snapshotVersion()
+    await persistSongs(updatedSongs)
+  }, [snapshotVersion, persistSongs])
 
   const handleSongSelect = (song: Song) => {
     setCurrentSong(song)
@@ -326,7 +384,7 @@ export default function NewComposer() {
     const updated = { ...currentSong, rawLyrics: text, updatedAt: Date.now() }
     setCurrentSong(updated)
     const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-    saveSongs(updatedSongs)
+    saveSongsWithSnapshot(updatedSongs)
   }
 
   const handleCreateNewSong = () => {
@@ -340,7 +398,7 @@ export default function NewComposer() {
       rawLyrics: '', createdAt: Date.now(), updatedAt: Date.now(),
     }
     const updated = [newSong, ...songs]
-    saveSongs(updated)
+    saveSongsWithSnapshot(updated)
     setCurrentSong(newSong)
     setWriteText('')
     setMode('write')
@@ -353,7 +411,7 @@ export default function NewComposer() {
     setCurrentSong(updated)
     if (field === 'bpm') setDrummerBpm(value as number)
     const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-    saveSongs(updatedSongs)
+    saveSongsWithSnapshot(updatedSongs)
   }
 
   const handleUpdateSection = (field: 'chordPro' | 'lyrics' | 'type', value: string | string[] | SectionType) => {
@@ -367,7 +425,7 @@ export default function NewComposer() {
     const updated = { ...currentSong, sections: newSections, updatedAt: Date.now() }
     setCurrentSong(updated)
     const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-    saveSongs(updatedSongs)
+    saveSongsWithSnapshot(updatedSongs)
   }
 
   const handleAddSection = (type: SectionType) => {
@@ -377,7 +435,7 @@ export default function NewComposer() {
     const updated = { ...currentSong, sections: newSections, updatedAt: Date.now() }
     setCurrentSong(updated)
     const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-    saveSongs(updatedSongs)
+    saveSongsWithSnapshot(updatedSongs)
     setActiveSectionIdx(newSections.length - 1)
     setShowAddSection(false)
   }
@@ -392,7 +450,7 @@ export default function NewComposer() {
     const updated = { ...currentSong, sections: newSections, updatedAt: Date.now() }
     setCurrentSong(updated)
     const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-    saveSongs(updatedSongs)
+    saveSongsWithSnapshot(updatedSongs)
     setActiveSectionIdx(Math.max(0, activeSectionIdx - 1))
     setDeleteConfirm(null)
   }
@@ -406,7 +464,7 @@ export default function NewComposer() {
     const updated = { ...currentSong, sections: newSections, updatedAt: Date.now() }
     setCurrentSong(updated)
     const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-    saveSongs(updatedSongs)
+    saveSongsWithSnapshot(updatedSongs)
     setActiveSectionIdx(newIdx)
   }
 
@@ -414,7 +472,7 @@ export default function NewComposer() {
     if (!currentSong) return
     if (deleteConfirm !== currentSong.id) { setDeleteConfirm(currentSong.id); return }
     const updated = songs.filter(s => s.id !== currentSong.id)
-    saveSongs(updated)
+    saveSongsWithSnapshot(updated)
     if (updated.length > 0) { setCurrentSong(updated[0]); setWriteText(updated[0].rawLyrics || '') }
     else handleCreateNewSong()
     setDeleteConfirm(null)
@@ -475,7 +533,7 @@ export default function NewComposer() {
     const updated = { ...currentSong, sections: newSections, rawLyrics: writeText, updatedAt: Date.now() }
     setCurrentSong(updated)
     const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-    saveSongs(updatedSongs)
+    saveSongsWithSnapshot(updatedSongs)
     setMode('arrange')
     setActiveSectionIdx(0)
   }
@@ -590,6 +648,20 @@ export default function NewComposer() {
               {focusMode ? 'Exit Focus' : 'Focus Mode'}
             </button>
           )}
+
+          <button
+            onClick={() => { loadSongVersions(); setShowHistory(true) }}
+            style={{
+              padding: '6px 14px', borderRadius: 6,
+              border: `1px solid ${BRAND.glamGold}66`,
+              background: `${BRAND.glamGold}15`,
+              color: BRAND.glamGold,
+              fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1.5,
+              textTransform: 'uppercase', cursor: 'pointer',
+            }}
+          >
+            🕐 History
+          </button>
 
           <button
             onClick={() => setShowRecorder(true)}
@@ -722,7 +794,7 @@ export default function NewComposer() {
                             const updated = { ...currentSong, sections: currentSong.sections.map((s, i) => i === idx ? { ...s, type: e.target.value as SectionType } : s), updatedAt: Date.now() }
                             setCurrentSong(updated)
                             const updatedSongs = songs.map(s => s.id === updated.id ? updated : s)
-                            saveSongs(updatedSongs)
+                            saveSongsWithSnapshot(updatedSongs)
                           }}
                           onBlur={() => setEditingSectionIdx(null)}
                           onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingSectionIdx(null) }}
@@ -948,8 +1020,8 @@ export default function NewComposer() {
             <button onClick={handleCopyChordPro} style={{ ...buttonStyle, color: copyConfirm ? BRAND.glamGold : '#fff' }}>
               {copyConfirm ? '✓ Copied!' : 'Copy Chord Pro'}
             </button>
-            <button onClick={() => { setShowRecordingsTab(true); setShowRecorder(true) }} style={{ ...buttonStyle, color: BRAND.electricTeal, borderColor: BRAND.electricTeal }}>
-              🎙 Recordings
+            <button onClick={() => setShowRecorder(true)} style={{ ...buttonStyle, color: BRAND.electricTeal, borderColor: BRAND.electricTeal }}>
+              🎙 Record
             </button>
             <button onClick={() => window.print()} style={{ ...buttonStyle, color: '#fff' }}>
               📄 Print PDF
@@ -961,7 +1033,51 @@ export default function NewComposer() {
         )}
       </div>
 
-      <RecorderModal open={showRecorder} onClose={() => { setShowRecorder(false); setShowRecordingsTab(false) }} initialTab={showRecordingsTab ? 'recordings' : 'record'} />
+      <RecorderModal open={showRecorder} onClose={() => setShowRecorder(false)} />
+
+      {/* ── HISTORY MODAL ─────────────────────────────────────────── */}
+      {showHistory && (
+        <>
+          <div onClick={() => setShowHistory(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9998 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: BRAND.surface, border: `1px solid ${BRAND.border}`, borderRadius: 16, padding: 24, zIndex: 9999, minWidth: 480, maxWidth: 640, maxHeight: '80vh', overflowY: 'auto', boxShadow: `0 16px 64px rgba(0,0,0,0.9)` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <span style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 18, color: BRAND.glamGold, letterSpacing: 2 }}>VERSION HISTORY</span>
+              <button onClick={() => setShowHistory(false)} style={{ ...buttonStyle, fontSize: 12, padding: '4px 10px' }}>✕ Close</button>
+            </div>
+            {loadingVersions ? (
+              <div style={{ textAlign: 'center', padding: 20, color: BRAND.muted, fontFamily: 'Space Mono, monospace', fontSize: 12 }}>Loading...</div>
+            ) : songVersions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 20, color: BRAND.muted, fontFamily: 'Space Mono, monospace', fontSize: 12 }}>No versions saved yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {songVersions.map(version => (
+                  <div key={version.id} onClick={() => restoreVersion(version)} style={{
+                    padding: '12px 16px', borderRadius: 8, border: `1px solid ${BRAND.border}`,
+                    background: `${BRAND.glamGold}08`, cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = BRAND.glamGold }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = BRAND.border }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontSize: 14, color: '#fff' }}>{version.title}</span>
+                      <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: BRAND.muted }}>
+                        {new Date(version.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 11, color: BRAND.muted, marginTop: 4 }}>
+                      {version.song_key} | {version.bpm} BPM | {version.sections?.length ?? 0} sections
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: BRAND.glamGold, fontFamily: 'Oswald, sans-serif', letterSpacing: 1 }}>
+                      Click to restore this version →
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
