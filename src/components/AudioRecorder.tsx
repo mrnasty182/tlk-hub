@@ -261,7 +261,7 @@ export default function AudioRecorder() {
     : BRAND.muted
 
   return (
-    <div style={{ background: BRAND.card, border: `1px solid ${BRAND.border}`, borderRadius: 16, padding: 24 }}>
+    <div data-recstate={state} style={{ background: BRAND.card, border: `1px solid ${BRAND.border}`, borderRadius: 16, padding: 24 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <div style={{
@@ -310,7 +310,7 @@ export default function AudioRecorder() {
             <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: BRAND.muted, marginBottom: 8 }}>DETECTED NOTE</div>
             {detectedNote ? (
               <>
-                <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 48, color: centsColor, letterSpacing: 2, lineHeight: 1 }}>
+                <div data-note style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 48, color: centsColor, letterSpacing: 2, lineHeight: 1 }}>
                   {detectedNote.note}{detectedNote.octave}
                 </div>
                 <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 14, color: centsColor, marginTop: 4 }}>
@@ -349,7 +349,7 @@ export default function AudioRecorder() {
             <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: BRAND.muted, marginBottom: 8 }}>DETECTED BPM</div>
             {detectedBPM ? (
               <>
-                <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 48, color: BRAND.electricTeal, letterSpacing: 2, lineHeight: 1 }}>
+                <div data-bpm style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 48, color: BRAND.electricTeal, letterSpacing: 2, lineHeight: 1 }}>
                   {detectedBPM}
                 </div>
                 <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, color: BRAND.muted, marginTop: 4 }}>BPM</div>
@@ -433,6 +433,9 @@ export default function AudioRecorder() {
             }}>
               Reset
             </button>
+            {audioUrl && (
+              <audio controls src={audioUrl} style={{ height: 36, width: '100%', marginBottom: 8 }} />
+            )}
             {audioUrl && (
               <a href={audioUrl} download="riff.webm" style={{
                 padding: '10px 20px', borderRadius: 10,

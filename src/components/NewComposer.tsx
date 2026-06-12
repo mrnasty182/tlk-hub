@@ -6,6 +6,7 @@ import ChordSheetDisplay from './ChordSheetDisplay'
 import AuthModal from './AuthModal'
 import DrummerGrid from './DrummerGrid'
 import BassTab from './BassTab'
+import RecorderModal from './RecorderModal'
 
 import { supabase } from '@/lib/supabase'
 import { loadSongs, saveSong, deleteSong as apiDeleteSong, migrateLocalStorageToSupabase } from '@/lib/songsApi'
@@ -148,6 +149,7 @@ export default function NewComposer() {
   const [showPreview, setShowPreview] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
   const [showDrummerGrid, setShowDrummerGrid] = useState(false)
+  const [showRecorder, setShowRecorder] = useState(false)
   const [drummerBpm, setDrummerBpm] = useState(currentSong?.bpm ?? 120)
   const [showBassTab, setShowBassTab] = useState(false)
   const searchParams = useSearchParams()
@@ -584,6 +586,20 @@ export default function NewComposer() {
             </button>
           )}
 
+          <button
+            onClick={() => setShowRecorder(true)}
+            style={{
+              padding: '6px 14px', borderRadius: 6,
+              border: `1px solid ${BRAND.hotPink}66`,
+              background: `${BRAND.hotPink}15`,
+              color: BRAND.hotPink,
+              fontFamily: 'Oswald, sans-serif', fontSize: 11, letterSpacing: 1.5,
+              textTransform: 'uppercase', cursor: 'pointer',
+            }}
+          >
+            🎙 Record
+          </button>
+
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
             {user && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -936,6 +952,8 @@ export default function NewComposer() {
           </div>
         )}
       </div>
+
+      <RecorderModal open={showRecorder} onClose={() => setShowRecorder(false)} />
     </div>
   )
 }
