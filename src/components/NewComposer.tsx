@@ -925,6 +925,9 @@ export default function NewComposer() {
             <button onClick={handleCopyChordPro} style={{ ...buttonStyle, color: copyConfirm ? BRAND.glamGold : '#fff' }}>
               {copyConfirm ? '✓ Copied!' : 'Copy Chord Pro'}
             </button>
+            <button onClick={() => window.print()} style={{ ...buttonStyle, color: '#fff' }}>
+              📄 Print PDF
+            </button>
             <button onClick={handleDeleteSong} style={{ ...buttonStyle, color: deleteConfirm === currentSong.id ? '#fff' : '#ff6b6b', borderColor: deleteConfirm === currentSong.id ? '#8B0000' : '#ff6b6b' }}>
               {deleteConfirm === currentSong.id ? 'Click again to confirm delete' : 'Delete Song'}
             </button>
