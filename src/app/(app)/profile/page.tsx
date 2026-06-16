@@ -1,184 +1,256 @@
 'use client'
 
-import { useAuth } from '@/components/AuthProvider'
+import { useEffect, useState, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { INSTRUMENT_LABELS, type InstrumentType } from '@/types/music'
 
-const BRAND = {
-  hotPink: '#FF2D9B',
-  electricTeal: '#00E5CC',
-  deepViolet: '#7B2FBE',
-  glamGold: '#F0C040',
-  midnight: '#08060F',
-  muted: '#6B6180',
-  surface: '#130E20',
-  card: '#0E0B18',
-  border: '#1E1830',
-}
+const INSTRUMENTS: InstrumentType[] = ['guitar_chords', 'guitar_tab', 'bass_tab', 'drums']
 
-const BAND_MEMBERS = [
-  { name: 'Josh', role: 'Guitar / Vox', color: BRAND.hotPink },
-  { name: 'Bill', role: 'Bass', color: BRAND.electricTeal },
-  { name: 'Estabon', role: 'Drums', color: BRAND.deepViolet },
-  { name: 'Joe', role: 'Guitar', color: BRAND.glamGold },
-]
+const BAND_ID_KEY = 'tlk-band-id'
+const INSTRUMENT_KEY = 'tlk-instrument'
 
-export default function ProfilePage() {
-  const { user } = useAuth()
+export default function Profile() {
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [instrument, setInstrument] = useState<InstrumentType | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+
+      // Try loading from band_members table
+      if (user) {
+        const { data: member } = await supabase
+          .from('band_members')
+          .select('instrument, band_id')
+          .eq('user_id', user.id)
+          .single()
+
+        if (member?.instrument) {
+          setInstrument(member.instrument as InstrumentType)
+        } else {
+          // Fall back to localStorage
+          const saved = localStorage.getItem(INSTRUMENT_KEY) as InstrumentType | null
+          setInstrument(saved)
+        }
+      } else {
+        const saved = localStorage.getItem(INSTRUMENT_KEY) as InstrumentType | null
+        setInstrument(saved)
+      }
+
+      setLoading(false)
+    }
+    init()
+  }, [])
+
+  const handleInstrumentChange = async (value: InstrumentType) => {
+    setInstrument(value)
+    setSaving(true)
+    setSaved(false)
+
+    // Always save to localStorage as fallback
+    localStorage.setItem(INSTRUMENT_KEY, value)
+
+    // Try saving to Supabase if logged in
+    if (user) {
+      const bandId = localStorage.getItem(BAND_ID_KEY)
+
+      const { error } = await supabase
+        .from('band_members')
+        .upsert({
+          user_id: user.id,
+          band_id: bandId || null,
+          instrument: value,
+          role: 'member',
+        }, { onConflict: 'band_id,user_id' })
+
+      if (error) {
+        console.warn('Could not save instrument to Supabase:', error.message)
+      }
+    }
+
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  if (loading) {
+    return <div className="page-loading"><div className="spinner"></div></div>
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: BRAND.midnight, padding: '48px 32px' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div className="profile-page">
+      <header className="page-header">
+        <h1 className="page-title">Profile</h1>
+      </header>
 
-        {/* Band header */}
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
-          <div style={{ marginBottom: 16 }}>
-            <span style={{
-              display: 'inline-block',
-              padding: '4px 14px',
-              borderRadius: 20,
-              border: `1px solid ${BRAND.deepViolet}`,
-              color: BRAND.deepViolet,
-              fontFamily: 'Oswald, sans-serif',
-              fontSize: 10,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-            }}>The Loin Kings</span>
+      <div className="profile-grid">
+        {/* User Info */}
+        <section className="profile-card user-info-card">
+          <div className="user-avatar-large">
+            {user?.user_metadata?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
           </div>
-          <h1 style={{
-            fontFamily: 'Bebas Neue, sans-serif',
-            fontSize: 'clamp(48px, 8vw, 96px)',
-            letterSpacing: 6,
-            color: BRAND.hotPink,
-            lineHeight: 0.9,
-            margin: '0 0 16px',
-          }}>THE LOIN KINGS</h1>
-          <p style={{
-            fontFamily: 'system-ui, sans-serif',
-            fontSize: 16,
-            color: BRAND.muted,
-            maxWidth: 480,
-            lineHeight: 1.6,
-            margin: '0 auto',
-          }}>Write. Rehearse. Rock. Atlanta's hardest-working rock band.</p>
-        </div>
-
-        {/* Account info */}
-        <div style={{
-          background: BRAND.card,
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 16,
-          padding: 28,
-          marginBottom: 40,
-        }}>
-          <div style={{
-            fontFamily: 'Oswald, sans-serif',
-            fontSize: 10,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            color: BRAND.muted,
-            marginBottom: 16,
-          }}>Account</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, color: BRAND.muted }}>Email</span>
-              <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, color: '#fff' }}>
-                {user?.email ?? 'Not signed in'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 12, color: BRAND.muted }}>User ID</span>
-              <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 11, color: BRAND.muted }}>
-                {user?.id ?? '—'}
-              </span>
-            </div>
+          <div className="user-details-full">
+            <h2 className="user-name-large">
+              {user?.user_metadata?.full_name || 'Guest'}
+            </h2>
+            <p className="user-email-full">{user?.email || 'Not signed in'}</p>
           </div>
-        </div>
+        </section>
 
-        {/* Band members */}
-        <div style={{
-          background: BRAND.card,
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 16,
-          padding: 28,
-          marginBottom: 40,
-        }}>
-          <div style={{
-            fontFamily: 'Oswald, sans-serif',
-            fontSize: 10,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            color: BRAND.muted,
-            marginBottom: 20,
-          }}>Band Members</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
-            {BAND_MEMBERS.map(member => (
-              <div key={member.name} style={{
-                background: BRAND.surface,
-                borderRadius: 12,
-                padding: 20,
-                textAlign: 'center',
-                border: `1px solid ${BRAND.border}`,
-              }}>
-                <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: '50%',
-                  background: `${member.color}22`,
-                  border: `2px solid ${member.color}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 12px',
-                  fontFamily: 'Bebas Neue, sans-serif',
-                  fontSize: 20,
-                  color: member.color,
-                }}>
-                  {member.name[0]}
-                </div>
-                <div style={{ fontFamily: 'Oswald, sans-serif', fontSize: 14, color: '#fff', marginBottom: 4 }}>
-                  {member.name}
-                </div>
-                <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: member.color }}>
-                  {member.role}
-                </div>
-              </div>
+        {/* Instrument Selection */}
+        <section className="profile-card instrument-card">
+          <h2 className="card-title">🎸 Your Instrument</h2>
+          <p className="card-desc">Sets your default view across the whole app.</p>
+
+          <div className="instrument-options">
+            {INSTRUMENTS.map((inst) => (
+              <button
+                key={inst}
+                className={`instrument-btn ${instrument === inst ? 'selected' : ''}`}
+                onClick={() => handleInstrumentChange(inst)}
+              >
+                <span className="instrument-label">{INSTRUMENT_LABELS[inst]}</span>
+                {instrument === inst && <span className="instrument-check">✓</span>}
+              </button>
             ))}
           </div>
-        </div>
 
-        {/* Stats */}
-        <div style={{
-          background: BRAND.card,
-          border: `1px solid ${BRAND.border}`,
-          borderRadius: 16,
-          padding: 28,
-        }}>
-          <div style={{
-            fontFamily: 'Oswald, sans-serif',
-            fontSize: 10,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            color: BRAND.muted,
-            marginBottom: 20,
-          }}>Band Stats</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-            {[
-              { label: 'Songs', value: '9', accent: BRAND.hotPink },
-              { label: 'Setlists', value: '3', accent: BRAND.electricTeal },
-              { label: 'Gigs Played', value: '12', accent: BRAND.glamGold },
-            ].map(stat => (
-              <div key={stat.label} style={{ textAlign: 'center' }}>
-                <div style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 48, color: stat.accent, lineHeight: 1 }}>
-                  {stat.value}
-                </div>
-                <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 10, color: BRAND.muted, letterSpacing: 1, marginTop: 4 }}>
-                  {stat.label}
-                </div>
-              </div>
-            ))}
+          <div className="save-status">
+            {saving && <span className="saving">Saving...</span>}
+            {saved && <span className="saved">✓ Saved</span>}
           </div>
-        </div>
-
+        </section>
       </div>
+
+      <style>{`
+        .profile-page {
+          padding: 32px;
+          min-height: 100vh;
+        }
+        .page-loading {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .page-header {
+          margin-bottom: 32px;
+        }
+        .page-title {
+          font-family: var(--font-display);
+          font-size: 36px;
+          color: var(--lk-white);
+        }
+        .profile-grid {
+          display: grid;
+          grid-template-columns: 1fr 2fr;
+          gap: 24px;
+          max-width: 900px;
+        }
+        .profile-card {
+          background: var(--lk-void);
+          border: 1px solid var(--lk-subtle);
+          border-radius: 16px;
+          padding: 32px;
+        }
+        .user-info-card {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+        }
+        .user-avatar-large {
+          width: 80px;
+          height: 80px;
+          background: linear-gradient(135deg, var(--lk-pink), var(--lk-violet));
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: var(--font-display);
+          font-size: 36px;
+          color: var(--lk-black);
+          margin-bottom: 20px;
+        }
+        .user-name-large {
+          font-family: var(--font-heading);
+          font-size: 24px;
+          margin-bottom: 4px;
+          color: var(--lk-white);
+        }
+        .user-email-full {
+          color: var(--lk-muted);
+          font-size: 14px;
+        }
+
+        /* Instrument Card */
+        .instrument-card .card-title {
+          font-family: var(--font-heading);
+          font-size: 18px;
+          letter-spacing: 1px;
+          margin-bottom: 8px;
+          color: var(--lk-white);
+        }
+        .card-desc {
+          color: var(--lk-muted);
+          font-size: 13px;
+          margin-bottom: 24px;
+        }
+        .instrument-options {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .instrument-btn {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 20px;
+          background: var(--lk-deep);
+          border: 1px solid var(--lk-subtle);
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.15s;
+          color: var(--lk-white);
+          font-family: var(--font-body);
+          font-size: 15px;
+        }
+        .instrument-btn:hover {
+          border-color: var(--lk-violet);
+          background: rgba(123, 47, 190, 0.1);
+        }
+        .instrument-btn.selected {
+          border-color: var(--lk-pink);
+          background: rgba(255, 45, 155, 0.1);
+          box-shadow: 0 0 0 1px var(--lk-pink);
+        }
+        .instrument-check {
+          color: var(--lk-pink);
+          font-size: 18px;
+        }
+        .save-status {
+          margin-top: 16px;
+          min-height: 20px;
+          font-size: 13px;
+        }
+        .saving {
+          color: var(--lk-muted);
+        }
+        .saved {
+          color: var(--lk-teal);
+        }
+
+        @media (max-width: 768px) {
+          .profile-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
   )
 }
