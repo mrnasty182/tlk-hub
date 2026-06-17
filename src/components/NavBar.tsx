@@ -2,70 +2,179 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { useAuth } from '@/components/AuthProvider'
+import { useRouter, usePathname } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+
+const NAV_ITEMS = [
+  { href: '/songs', label: 'Songs', short: 'Songs' },
+  { href: '/composer', label: 'Compose', short: 'Compose' },
+  { href: '/scales', label: 'Scales', short: 'Scales' },
+  { href: '/setlists', label: 'Setlists', short: 'Sets' },
+  { href: '/calendar', label: 'Calendar', short: 'Cal' },
+  { href: '/dashboard', label: 'Dashboard', short: 'Dash' },
+  { href: '/profile', label: 'Profile', short: 'Me' },
+]
 
 export default function NavBar() {
-  const { signOut } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  return (
-    <nav className="nav-bar">
-      <Link href="/" className="nav-brand">TLK HUB</Link>
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/')
+  }
 
-      {/* Hamburger — hidden on md+ */}
-      <button
-        className="md:hidden"
-        onClick={() => setMenuOpen(!menuOpen)}
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 5,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '8px',
-          marginLeft: 'auto',
-        }}
-      >
-        <span style={{ display: 'block', width: 22, height: 2, background: '#FF2D9B', borderRadius: 2 }} />
-        <span style={{ display: 'block', width: 22, height: 2, background: '#FF2D9B', borderRadius: 2 }} />
-        <span style={{ display: 'block', width: 22, height: 2, background: '#FF2D9B', borderRadius: 2 }} />
+  const isActive = (href: string) => pathname === href || (href === '/songs' && pathname?.startsWith('/songs'))
+
+  return (
+    <nav className="tlk-nav">
+      <Link href="/songs" className="tlk-brand" onClick={() => setMenuOpen(false)}>
+        <span className="brand-mark">🥩</span>
+        <span className="brand-text">TLK</span>
+      </Link>
+
+      <div className={`tlk-nav-links ${menuOpen ? 'open' : ''}`}>
+        {NAV_ITEMS.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`tlk-nav-link ${isActive(item.href) ? 'active' : ''}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </div>
+
+      <button onClick={handleSignOut} className="tlk-sign-out">
+        Sign Out
       </button>
 
-      {/* Nav links — desktop: flex row; mobile: hidden unless menuOpen */}
-      <div
-        className={`
-          nav-menu
-          md:flex flex-row items-center gap-1
-          hidden flex-col w-full mt-4 md:mt-0
-          ${menuOpen ? 'flex' : 'hidden'}
-        `}
-        style={{ background: '#130E20' }}
+      <button
+        className="tlk-hamburger"
+        onClick={() => setMenuOpen(!menuOpen)}
+        aria-label="Toggle menu"
       >
-        <Link href="/songs" className="nav-item" onClick={() => setMenuOpen(false)}>Songs</Link>
-        <Link href="/composer" className="nav-item" onClick={() => setMenuOpen(false)}>Compose</Link>
-        <Link href="/scales" className="nav-item" onClick={() => setMenuOpen(false)}>Scales</Link>
-        <Link href="/setlists" className="nav-item" onClick={() => setMenuOpen(false)}>Setlists</Link>
-        <Link href="/calendar" className="nav-item" onClick={() => setMenuOpen(false)}>Calendar</Link>
-        <Link href="/dashboard" className="nav-item" onClick={() => setMenuOpen(false)}>Dashboard</Link>
-        <button
-          onClick={signOut}
-          style={{
-            marginLeft: 'auto',
-            background: 'none',
-            border: 'none',
-            color: '#6B6180',
-            fontFamily: 'Oswald, sans-serif',
-            fontSize: 11,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            cursor: 'pointer',
-            padding: '8px 12px',
-          }}
-        >
-          Sign Out
-        </button>
-      </div>
+        <span /><span /><span />
+      </button>
+
+      <style>{`
+        .tlk-nav {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 0 16px;
+          height: 52px;
+          background: var(--lk-void, #130E20);
+          border-bottom: 1px solid var(--lk-subtle, #1E1830);
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          font-family: 'Oswald', system-ui, sans-serif;
+        }
+        .tlk-brand {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          text-decoration: none;
+          padding: 4px 8px;
+          margin-right: 4px;
+          flex-shrink: 0;
+        }
+        .brand-mark { font-size: 18px; line-height: 1; }
+        .brand-text {
+          font-family: 'Bebas Neue', sans-serif;
+          font-size: 18px;
+          letter-spacing: 3px;
+          color: var(--lk-pink, #FF2D9B);
+          line-height: 1;
+        }
+        .tlk-nav-links {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          flex: 1;
+          min-width: 0;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .tlk-nav-links::-webkit-scrollbar { display: none; }
+        .tlk-nav-link {
+          padding: 6px 10px;
+          color: var(--lk-muted, #6B6180);
+          text-decoration: none;
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 1px;
+          text-transform: uppercase;
+          border-radius: 6px;
+          white-space: nowrap;
+          transition: all 0.15s;
+        }
+        .tlk-nav-link:hover {
+          color: var(--lk-white, #F0EBF8);
+          background: var(--lk-subtle, #1E1830);
+        }
+        .tlk-nav-link.active {
+          color: var(--lk-pink, #FF2D9B);
+          background: rgba(255, 45, 155, 0.12);
+        }
+        .tlk-sign-out {
+          padding: 6px 12px;
+          background: transparent;
+          border: 1px solid var(--lk-subtle, #1E1830);
+          color: var(--lk-muted, #6B6180);
+          font-family: 'Oswald', sans-serif;
+          font-size: 10px;
+          letter-spacing: 1.5px;
+          text-transform: uppercase;
+          border-radius: 6px;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: all 0.15s;
+        }
+        .tlk-sign-out:hover {
+          color: var(--lk-white, #F0EBF8);
+          border-color: var(--lk-pink, #FF2D9B);
+        }
+        .tlk-hamburger {
+          display: none;
+          flex-direction: column;
+          gap: 4px;
+          background: none;
+          border: none;
+          padding: 8px;
+          cursor: pointer;
+        }
+        .tlk-hamburger span {
+          display: block;
+          width: 22px;
+          height: 2px;
+          background: var(--lk-pink, #FF2D9B);
+          border-radius: 2px;
+        }
+        @media (max-width: 768px) {
+          .tlk-hamburger { display: flex; }
+          .tlk-nav-links {
+            position: absolute;
+            top: 52px;
+            left: 0;
+            right: 0;
+            background: var(--lk-void, #130E20);
+            border-bottom: 1px solid var(--lk-subtle, #1E1830);
+            flex-direction: column;
+            align-items: stretch;
+            padding: 8px;
+            gap: 2px;
+            display: none;
+            overflow-x: visible;
+          }
+          .tlk-nav-links.open { display: flex; }
+          .tlk-nav-link { padding: 10px 16px; }
+          .tlk-sign-out { display: none; }
+        }
+      `}</style>
     </nav>
   )
 }
