@@ -1403,9 +1403,60 @@ const styles = `
     pointer-events: none;
   }
 
-  @media (max-width: 768px) {
-    .song-sidebar { width: 200px; }
-    .editor-topbar { flex-wrap: wrap; gap: 8px; }
-    .topbar-meta { flex-wrap: wrap; }
+  /* ── Responsive ───────────────────────────────────────────────── */
+  /* Tablet (768–1023px): narrow sidebar, smaller paddings */
+  @media (max-width: 1023px) {
+    .song-sidebar { width: 220px; }
+    .editor-topbar { padding: 10px 14px; gap: 8px; }
+    .song-title-input { font-size: 16px; }
+  }
+  /* Phone (<768px): sidebar collapses to top horizontal scroll strip, topbar wraps */
+  @media (max-width: 767px) {
+    .songs-page-v2 { height: auto; min-height: 100vh; overflow: visible; flex-direction: column; }
+    .editor-layout { flex-direction: column; height: auto; }
+    .song-sidebar {
+      width: 100%;
+      max-height: none;
+      border-right: none;
+      border-bottom: 1px solid var(--lk-subtle);
+    }
+    .sidebar-header { padding: 10px 14px; }
+    .song-list {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 8px 14px 12px;
+      scrollbar-width: none;
+    }
+    .song-list::-webkit-scrollbar { display: none; }
+    .song-item {
+      flex: 0 0 auto;
+      min-width: 180px;
+      margin-bottom: 0;
+      padding: 10px 12px;
+    }
+    .editor-main { width: 100%; }
+    .editor-topbar {
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 12px;
+    }
+    .topbar-left { flex: 1 1 100%; min-width: 100%; }
+    .song-title-input { font-size: 18px; padding: 8px 10px; width: 100%; }
+    .topbar-meta { flex: 1 1 auto; flex-wrap: wrap; gap: 6px; }
+    .topbar-right { flex: 1 1 auto; justify-content: space-between; }
+    .bpm-control { flex: 1; }
+    .bpm-input { width: 100%; min-height: 40px; }
+    .editor-content { padding: 12px; }
+    .section-body { padding: 12px; }
+    .field-textarea { min-height: 100px; font-size: 16px; }
+    .section-meta-row { flex-direction: column; align-items: stretch; }
+    .section-type-select, .section-name-input { width: 100%; min-height: 44px; }
+    /* Hide desktop drag handle on touch */
+    .drag-handle { display: none; }
+    /* Promote up/down buttons to be larger */
+    .section-reorder button { min-width: 40px; min-height: 40px; font-size: 14px; }
+    .section-delete { min-width: 40px; min-height: 40px; font-size: 14px; }
   }
 `

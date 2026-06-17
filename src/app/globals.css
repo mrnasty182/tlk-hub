@@ -157,3 +157,77 @@ input:focus, textarea:focus, select:focus { border-color: var(--lk-pink); }
 }
 .pill-pink { background: rgba(255,45,155,0.15); color: var(--lk-pink); border: 1px solid rgba(255,45,155,0.3); }
 .pill-teal { background: rgba(0,229,204,0.15); color: var(--lk-teal); border: 1px solid rgba(0,229,204,0.3); }
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE-FIRST RESPONSIVE OVERLAY
+   - All sizes default to mobile
+   - @media (min-width: 768px) = tablet
+   - @media (min-width: 1024px) = desktop
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Touch target minimums — applies globally so any inline button is finger-friendly */
+@media (max-width: 767px) {
+  button, .btn, a.btn { min-height: 44px; }
+  input, textarea, select { font-size: 16px; } /* iOS zoom prevention */
+  textarea { min-height: 80px; }
+  /* Hide desktop-only helpers on mobile */
+  .desktop-only { display: none !important; }
+  /* Show mobile-only helpers */
+  .mobile-only { display: initial !important; }
+  /* Reduce horizontal padding globally on small screens */
+  .page, .app-shell, main { padding-left: 0 !important; padding-right: 0 !important; }
+}
+
+/* Prevent horizontal scroll globally from elements that overflow */
+html, body { overflow-x: hidden; max-width: 100vw; }
+
+/* Disable text-size-adjust surprise on iOS */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Touch-action on interactive surfaces — stop double-tap zoom, allow scroll */
+button, .btn, .tlk-nav-link, .song-item, .section-header { touch-action: manipulation; }
+
+/* Bottom-tab mobile nav (rendered by AppShell, hidden on desktop) */
+.tlk-bottom-nav {
+  display: none;
+}
+@media (max-width: 767px) {
+  .tlk-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: var(--lk-void);
+    border-top: 1px solid var(--lk-subtle);
+    z-index: 99;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tlk-bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--lk-muted);
+    text-decoration: none;
+    font-family: var(--font-heading);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    background: none;
+    border: none;
+    cursor: pointer;
+    min-height: 56px;
+  }
+  .tlk-bottom-nav-item .icon { font-size: 18px; line-height: 1; }
+  .tlk-bottom-nav-item.active { color: var(--lk-pink); }
+  /* Add bottom padding to main content so it doesn't sit under the bottom nav */
+  body:has(.tlk-bottom-nav) main,
+  body:has(.tlk-bottom-nav) .songs-page-v2,
+  body:has(.tlk-bottom-nav) .app-main {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+  }
+}
