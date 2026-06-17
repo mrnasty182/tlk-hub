@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import AudioRecorder from './AudioRecorder'
+import { supabase } from '@/lib/supabase'
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -121,14 +122,17 @@ export default function RecorderModal({ open, onClose, initialTab = 'record' }: 
     return () => clearInterval(interval)
   }, [open, activeTab])
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!saveForm) return
+    const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+    const name = recordingName || `Riff ${new Date().toLocaleTimeString()}`
+
+    // Read as data URL for localStorage fallback
     const reader = new FileReader()
     reader.onload = () => {
-      const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
       const rec: SavedRecording = {
         id,
-        name: recordingName || `Riff ${new Date().toLocaleTimeString()}`,
+        name,
         data: reader.result as string,
         duration: 0,
         createdAt: Date.now(),
@@ -142,6 +146,26 @@ export default function RecorderModal({ open, onClose, initialTab = 'record' }: 
       setDetectedInfo({})
     }
     reader.readAsDataURL(saveForm.blob)
+
+    // Upload to Supabase Storage (background — don't block UI)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const ext = saveForm.blob.type.includes('webm') ? 'webm'
+          : saveForm.blob.type.includes('ogg') ? 'ogg'
+          : saveForm.blob.type.includes('mp4') ? 'm4a'
+          : 'webm'
+        const path = `${user.id}/clips/${id}.${ext}`
+        const { error: uploadErr } = await supabase.storage
+          .from('tlk-audio')
+          .upload(path, saveForm.blob, { upsert: true, contentType: saveForm.blob.type })
+        if (uploadErr) {
+          console.warn('[recorder] storage upload failed (local copy kept):', uploadErr.message)
+        }
+      }
+    } catch (e) {
+      console.warn('[recorder] storage upload error:', e)
+    }
   }, [saveForm, recordingName, detectedInfo])
 
   const handleDelete = useCallback((id: string) => {

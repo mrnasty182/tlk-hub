@@ -143,7 +143,7 @@ export default function NewComposer() {
   const [editingSectionIdx, setEditingSectionIdx] = useState<number | null>(null)
   const [showAddSection, setShowAddSection] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'unsaved'>('idle')
   const [copyConfirm, setCopyConfirm] = useState(false)
   const [writeText, setWriteText] = useState('')
   const [showPreview, setShowPreview] = useState(false)
@@ -992,7 +992,17 @@ export default function NewComposer() {
                           />
                           <span style={{ fontFamily: 'Space Mono, monospace', fontSize: 11, color: BRAND.muted }}>BPM</span>
                         </div>
-                        <DrummerGrid bpm={drummerBpm} />
+                        <DrummerGrid
+                          bpm={drummerBpm}
+                          initial={currentSong.sections[activeSectionIdx]?.drumGrid ?? null}
+                          onChange={(data) => {
+                            if (!currentSong.sections[activeSectionIdx]) return
+                            const updated = [...currentSong.sections]
+                            updated[activeSectionIdx] = { ...updated[activeSectionIdx], drumGrid: data }
+                            setCurrentSong({ ...currentSong, sections: updated })
+                            setSaveStatus('unsaved')
+                          }}
+                        />
                       </div>
                     )}
 

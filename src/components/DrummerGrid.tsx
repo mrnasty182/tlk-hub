@@ -1,9 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { DrumGridData } from '@/lib/types';
 
 interface DrummerGridProps {
   bpm?: number;
+  initial?: DrumGridData | null;
+  onChange?: (data: DrumGridData) => void;
 }
 
 const ROWS = ['Kick', 'Snare', 'HiHat', 'Tom'] as const;
@@ -20,15 +23,43 @@ const COLORS = {
   labelGray: '#6B6180',
 };
 
-export default function DrummerGrid({ bpm = DEFAULT_BPM }: DrummerGridProps) {
-  const [activePads, setActivePads] = useState<Record<string, Set<number>>>({
-    Kick: new Set(),
-    Snare: new Set(),
-    HiHat: new Set(),
-    Tom: new Set(),
-  });
+function hitsFromInitial(initial?: DrumGridData | null): Record<string, Set<number>> {
+  const base: Record<string, Set<number>> = {
+    Kick: new Set(), Snare: new Set(), HiHat: new Set(), Tom: new Set(),
+  };
+  if (!initial?.hits) return base;
+  for (const row of ROWS) {
+    base[row] = new Set(initial.hits[row] ?? []);
+  }
+  return base;
+}
+
+export default function DrummerGrid({ bpm = DEFAULT_BPM, initial = null, onChange }: DrummerGridProps) {
+  const [activePads, setActivePads] = useState<Record<string, Set<number>>>(() => hitsFromInitial(initial));
   const [currentStep, setCurrentStep] = useState<number>(-1);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  // Re-seed when initial changes (e.g. user switches active section)
+  useEffect(() => {
+    setActivePads(hitsFromInitial(initial));
+    setIsPlaying(false);
+    setCurrentStep(-1);
+  }, [initial?.hits?.Kick?.length, initial?.hits?.Snare?.length, initial?.hits?.HiHat?.length, initial?.hits?.Tom?.length, initial?.bpm]);
+
+  // Emit pattern changes back to parent
+  useEffect(() => {
+    if (!onChangeRef.current) return;
+    const hits: Record<string, number[]> = {};
+    for (const row of ROWS) {
+      hits[row] = Array.from(activePads[row]).sort((a, b) => a - b);
+    }
+    onChangeRef.current({ bpm, timeSig: '4/4', hits });
+    // We intentionally do NOT include `bpm` in deps — BPM lives at the song level,
+    // and we don't want to re-emit on every bpm render of the parent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePads]);
 
   const stepInterval = 60000 / bpm / 4;
 
