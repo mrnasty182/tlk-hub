@@ -353,7 +353,7 @@ export default function DashboardPage() {
               textTransform: 'uppercase',
             }}>View All →</Link>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px', md: { gridTemplateColumns: 'repeat(2, 1fr)' }, lg: { gridTemplateColumns: 'repeat(3, 1fr)' } }}>
+          <div className="dashboard-recent-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
             {recentSongs.length > 0 ? recentSongs.map(song => (
               <SongItem
                 key={song.id}

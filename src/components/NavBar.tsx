@@ -35,11 +35,12 @@ export default function NavBar() {
       {/* Nav links — desktop: flex row; mobile: hidden unless menuOpen */}
       <div
         className={`
+          nav-menu
           md:flex flex-row items-center gap-1
           hidden flex-col w-full mt-4 md:mt-0
           ${menuOpen ? 'flex' : 'hidden'}
         `}
-        style={{ background: '#130E20', md: { background: 'transparent' } }}
+        style={{ background: '#130E20' }}
       >
         <Link href="/songs" className="nav-item" onClick={() => setMenuOpen(false)}>Songs</Link>
         <Link href="/composer" className="nav-item" onClick={() => setMenuOpen(false)}>Compose</Link>

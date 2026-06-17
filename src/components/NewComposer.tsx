@@ -618,8 +618,8 @@ export default function NewComposer() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Top bar — wraps on mobile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64, background: BRAND.surface, borderBottom: `1px solid ${BRAND.border}`, flexShrink: 0, marginTop: focusMode && mode === 'write' ? 44 : 0, flexWrap: 'wrap', md: { flexWrap: 'nowrap' } }}>
-          <input value={currentSong.title} onChange={e => handleUpdateSongMeta('title', e.target.value)} style={{ ...inputStyle, fontFamily: 'Bebas Neue, sans-serif', fontSize: 20, letterSpacing: 1, width: 160, md: { width: 220 }, background: 'transparent', border: 'none', color: '#fff', padding: '4px 8px' }} />
+        <div className="composer-topbar" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', height: 64, background: BRAND.surface, borderBottom: `1px solid ${BRAND.border}`, flexShrink: 0, marginTop: focusMode && mode === 'write' ? 44 : 0, flexWrap: 'wrap' }}>
+          <input className="composer-title-input" value={currentSong.title} onChange={e => handleUpdateSongMeta('title', e.target.value)} style={{ ...inputStyle, fontFamily: 'Bebas Neue, sans-serif', fontSize: 20, letterSpacing: 1, width: 160, background: 'transparent', border: 'none', color: '#fff', padding: '4px 8px' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <label style={{ color: BRAND.muted, fontSize: 11, fontFamily: 'Space Mono, monospace', letterSpacing: 1 }}>KEY</label>
             <select value={currentSong.key} onChange={e => handleUpdateSongMeta('key', e.target.value)} style={{ ...inputStyle, width: 70, fontFamily: 'Space Mono, monospace', fontSize: 13, cursor: 'pointer' }}>
