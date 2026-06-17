@@ -5,6 +5,7 @@ import type { Section, SectionType, Song } from '@/types/music'
 import { SECTION_TYPES, SECTION_TYPE_LABELS } from '@/types/music'
 import { createEmptySection, uid } from '@/lib/sections'
 import { parseFreeformToSections } from '@/lib/chordpro'
+import { supabase } from '@/lib/supabase'
 
 // ── Demo songs with v2 section structure ───────────────────────
 
@@ -228,6 +229,74 @@ export default function SongsPage() {
       setWriteText(selectedSong.raw_lyrics || '')
     }
   }, [viewMode, selectedId])
+
+  // ── Load songs from Supabase on mount ────────────────────────
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const userId = session?.user?.id
+      if (!userId) return
+      const { data, error } = await supabase
+        .from('songs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+      if (cancelled || error || !data) return
+
+      const loaded: Song[] = data.map((row: any) => ({
+        id: row.id,
+        user_id: row.user_id,
+        band_id: row.band_id,
+        title: row.title,
+        key: row.key,
+        bpm: row.bpm,
+        time_sig: row.time_sig,
+        visibility: row.visibility,
+        raw_lyrics: row.raw_lyrics || '',
+        sections: row.sections || [],
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }))
+      if (loaded.length > 0) {
+        setSongs(loaded)
+        setSelectedId(loaded[0].id)
+        setExpandedSections(new Set([loaded[0].sections[0]?.id].filter(Boolean) as string[]))
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Persist song updates to Supabase ────────────────────────
+
+  useEffect(() => {
+    if (songs.length === 0) return
+    const persist = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const userId = session?.user?.id
+      if (!userId) return
+      // Only persist the currently selected song (avoid persisting during initial load)
+      const sel = songs.find(s => s.id === selectedId)
+      if (!sel) return
+      // Skip demo songs (id starts with 'demo-')
+      if (sel.id.startsWith('demo-')) return
+      await supabase.from('songs').upsert({
+        id: sel.id,
+        user_id: userId,
+        title: sel.title,
+        key: sel.key,
+        bpm: sel.bpm,
+        time_sig: sel.time_sig,
+        sections: sel.sections,
+        raw_lyrics: sel.raw_lyrics || '',
+        updated_at: new Date().toISOString(),
+      })
+    }
+    const timer = setTimeout(persist, 800)
+    return () => clearTimeout(timer)
+  }, [songs, selectedId])
 
   // ── Render ─────────────────────────────────────────────────
 

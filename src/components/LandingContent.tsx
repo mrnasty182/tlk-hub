@@ -23,7 +23,7 @@ export default function LandingContent() {
         {/* Background steak image + gradient overlay */}
         <div style={{
           position: 'absolute', inset: 0,
-          backgroundImage: 'url(/images/hero-steak.jpg)',
+          backgroundImage: 'url(/images/logo-skull.jpg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           opacity: 0.45,
