@@ -224,10 +224,72 @@ button, .btn, .tlk-nav-link, .song-item, .section-header { touch-action: manipul
   }
   .tlk-bottom-nav-item .icon { font-size: 18px; line-height: 1; }
   .tlk-bottom-nav-item.active { color: var(--lk-pink); }
-  /* Add bottom padding to main content so it doesn't sit under the bottom nav */
   body:has(.tlk-bottom-nav) main,
   body:has(.tlk-bottom-nav) .songs-page-v2,
   body:has(.tlk-bottom-nav) .app-main {
     padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PAGE-LEVEL RESPONSIVE OVERRIDES
+   - Composer / Setlists / Scales / Profile share these patterns
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Composer: hide sidebar on mobile, full-width topbar wraps */
+@media (max-width: 767px) {
+  .composer-shell { flex-direction: column; height: auto !important; min-height: 100vh; }
+  .composer-sidebar { display: none !important; }
+  .composer-topbar { height: auto !important; padding: 8px 12px !important; gap: 8px !important; }
+  .composer-title-input { width: 100% !important; font-size: 18px !important; }
+  .composer-main { width: 100% !important; }
+  .composer-section-tabs { padding: 8px 12px !important; overflow-x: auto !important; }
+  .composer-bottom-actions { padding: 12px !important; flex-wrap: wrap !important; }
+}
+
+/* Setlists: stack two columns vertically on mobile */
+@media (max-width: 1023px) {
+  .setlists-shell { padding: 12px !important; }
+  .setlists-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+  .setlists-header { padding: 16px !important; flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
+  .setlists-header h1 { font-size: 32px !important; }
+}
+@media (max-width: 767px) {
+  .setlists-shell { padding: 8px !important; }
+  .setlist-card { padding: 12px !important; }
+  .setlist-card h2 { font-size: 20px !important; }
+}
+
+/* Scales page: scale the circle of fifths down on mobile */
+@media (max-width: 767px) {
+  .scales-shell { padding: 8px !important; }
+  .scales-tabs { overflow-x: auto !important; padding: 4px !important; }
+  .scales-circle-container { transform: scale(0.7); transform-origin: top center; margin: -10% 0 !important; }
+}
+
+/* Profile: stack settings two-column on tablet, one-column on mobile */
+@media (max-width: 1023px) {
+  .profile-shell { padding: 16px !important; }
+  .profile-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+}
+@media (max-width: 767px) {
+  .profile-shell { padding: 8px !important; }
+  .profile-card { padding: 12px !important; }
+}
+
+/* Modals: become bottom-sheet style on mobile */
+@media (max-width: 767px) {
+  .tlk-modal {
+    position: fixed !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 85vh !important;
+    border-radius: 20px 20px 0 0 !important;
+    padding: 16px !important;
   }
 }

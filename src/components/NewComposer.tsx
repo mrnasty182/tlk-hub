@@ -10,7 +10,13 @@ import RecorderModal from './RecorderModal'
 
 import { supabase } from '@/lib/supabase'
 import { loadSongs, saveSong, deleteSong as apiDeleteSong, migrateLocalStorageToSupabase } from '@/lib/songsApi'
+import { readWithCache, readCacheOnly, writeWithCache, migrateLegacyCache } from '@/lib/persistence'
 import type { Song, SongSection, SectionType } from '@/lib/types'
+
+// Run legacy migration once on module load (client only)
+if (typeof window !== 'undefined') {
+  migrateLegacyCache()
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -190,17 +196,11 @@ export default function NewComposer() {
       let loaded: Song[] = []
 
       if (!user) {
-        // Load from localStorage for logged-out users
-        const stored = localStorage.getItem('tlk-songs-v2')
-        if (stored) {
-          try {
-            const parsed: Song[] = JSON.parse(stored)
-            loaded = parsed
-            setSongs(parsed)
-          } catch {
-            initDefaults()
-            return
-          }
+        // Logged out — fall back to offline cache
+        const cached = readCacheOnly<Song[]>('songs')
+        if (cached) {
+          loaded = cached
+          setSongs(cached)
         } else {
           initDefaults()
           return
@@ -254,23 +254,19 @@ export default function NewComposer() {
     if (!authLoading) {
       init()
     } else {
-      // Auth still loading — load from localStorage immediately so songId param works
-      const stored = localStorage.getItem('tlk-songs-v2')
-      if (stored) {
-        try {
-          const parsed: Song[] = JSON.parse(stored)
-          setSongs(parsed)
-          // Select the right song from ?songId= while we wait for auth
-          const songIdParam = searchParams?.get('songId')
-          if (songIdParam && parsed.length > 0) {
-            const found = parsed.find(s => s.id === songIdParam)
-            if (found) {
-              setCurrentSong(found)
-              setWriteText(found.rawLyrics || '')
-              setDrummerBpm(found.bpm)
-            }
+      // Auth still loading — read from offline cache so songId param works
+      const cached = readCacheOnly<Song[]>('songs')
+      if (cached) {
+        setSongs(cached)
+        const songIdParam = searchParams?.get('songId')
+        if (songIdParam && cached.length > 0) {
+          const found = cached.find(s => s.id === songIdParam)
+          if (found) {
+            setCurrentSong(found)
+            setWriteText(found.rawLyrics || '')
+            setDrummerBpm(found.bpm)
           }
-        } catch { /* ignore */ }
+        }
       }
     }
   }, [user, authLoading, searchParams])
@@ -280,24 +276,33 @@ export default function NewComposer() {
     setSongs(initialized)
     setCurrentSong(initialized[0])
     setWriteText(initialized[0].rawLyrics || '')
-    localStorage.setItem('tlk-songs-v2', JSON.stringify(initialized))
+    // Cache for offline access
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('tlk-cache-songs', JSON.stringify({ ts: Date.now(), data: initialized }))
+      } catch { /* ignore */ }
+    }
   }
 
   // ── Save songs (persistence only, no snapshot) ────────────────────────────
   const persistSongs = useCallback(async (updatedSongs: Song[]) => {
     setSaveStatus('saving')
-    localStorage.setItem('tlk-songs-v2', JSON.stringify(updatedSongs))
     setSongs(updatedSongs)
 
     if (user) {
+      // Logged in: Supabase is the source of truth
       const current = updatedSongs.find(s => s.id === currentSong?.id)
       if (current) {
-        const ok = await saveSong(current, user.id)
-        setSaveStatus(ok ? 'saved' : 'error')
+        const { ok, queued } = await writeWithCache('songs', updatedSongs, () => saveSong(current, user.id).then(ok => { if (!ok) throw new Error('save failed') }))
+        setSaveStatus(queued ? 'unsaved' : (ok ? 'saved' : 'error'))
       } else {
+        // No current change — still update cache
+        writeWithCache('songs', updatedSongs, async () => {})
         setSaveStatus('saved')
       }
     } else {
+      // Logged out: cache is the only option
+      writeWithCache('songs', updatedSongs, async () => {})
       setSaveStatus('saved')
     }
     setTimeout(() => setSaveStatus('idle'), 2000)
@@ -568,7 +573,7 @@ export default function NewComposer() {
   const buttonStyle: React.CSSProperties = { padding: '8px 16px', borderRadius: 8, border: `1px solid ${BRAND.border}`, background: 'transparent', color: '#fff', fontFamily: 'system-ui', fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: BRAND.midnight, color: '#fff', fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
+    <div className="composer-shell" style={{ display: 'flex', height: '100vh', background: BRAND.midnight, color: '#fff', fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
 
       {/* ── FOCUS MODE: STATUS BAR ────────────────────────────────── */}
       {focusMode && mode === 'write' && (
@@ -584,17 +589,18 @@ export default function NewComposer() {
       )}
 
       {/* ── SIDEBAR ──────────────────────────────────────────────── */}
-      <div style={{
-        width: focusMode ? 0 : 260,
-        flexShrink: 0,
-        background: BRAND.surface,
-        borderRight: `1px solid ${BRAND.border}`,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        transition: 'width 0.3s ease',
-      }}
-        className="hidden md:flex"
+      <div
+        className="composer-sidebar"
+        style={{
+          width: focusMode ? 0 : 260,
+          flexShrink: 0,
+          background: BRAND.surface,
+          borderRight: `1px solid ${BRAND.border}`,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          transition: 'width 0.3s ease',
+        }}
       >
         <div style={{ padding: '16px', borderBottom: `1px solid ${BRAND.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 18, letterSpacing: 2, color: BRAND.hotPink }}>SONGS</span>
@@ -781,7 +787,7 @@ export default function NewComposer() {
             <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
               {/* Section tabs */}
-              <div style={{ display: 'flex', gap: 6, padding: '12px 24px', background: BRAND.card, borderBottom: `1px solid ${BRAND.border}`, overflowX: 'auto', flexShrink: 0, alignItems: 'center' }}>
+              <div className="composer-section-tabs" style={{ display: 'flex', gap: 6, padding: '12px 24px', background: BRAND.card, borderBottom: `1px solid ${BRAND.border}`, overflowX: 'auto', flexShrink: 0, alignItems: 'center' }}>
                 {currentSong.sections.map((section, idx) => {
                   const isEditing = editingSectionIdx === idx
                   return (
@@ -1023,7 +1029,7 @@ export default function NewComposer() {
 
         {/* Action bar */}
         {!focusMode && (
-          <div style={{ display: 'flex', gap: 10, padding: '16px 24px', borderTop: `1px solid ${BRAND.border}`, background: BRAND.surface, flexShrink: 0 }}>
+          <div className="composer-bottom-actions" style={{ display: 'flex', gap: 10, padding: '16px 24px', borderTop: `1px solid ${BRAND.border}`, background: BRAND.surface, flexShrink: 0 }}>
             <button onClick={() => { handleUpdateSongMeta('title', currentSong.title) }} style={{ ...buttonStyle, color: saveStatus === 'saved' ? BRAND.electricTeal : '#fff', borderColor: saveStatus === 'saved' ? BRAND.electricTeal : BRAND.border }}>
               {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? '✓ Saved' : 'Save Song'}
             </button>

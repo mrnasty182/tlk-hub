@@ -132,9 +132,9 @@ export default function SetlistsPage() {
   // Edit or create mode
   if (editingSetlist || isCreating) {
     return (
-      <div style={{ minHeight: '100vh', background: BRAND.midnight }}>
+      <div className="setlists-shell" style={{ minHeight: '100vh', background: BRAND.midnight }}>
         {/* Header */}
-        <div style={{ padding: '24px 48px', borderBottom: `1px solid ${BRAND.border}`, display: 'flex', alignItems: 'center', gap: 24 }}>
+        <div className="setlists-header" style={{ padding: '24px 48px', borderBottom: `1px solid ${BRAND.border}`, display: 'flex', alignItems: 'center', gap: 24 }}>
           <button
             onClick={handleBackToLibrary}
             style={{
@@ -176,9 +176,9 @@ export default function SetlistsPage() {
 
   // Library view
   return (
-    <div style={{ minHeight: '100vh', background: BRAND.midnight }}>
+    <div className="setlists-shell" style={{ minHeight: '100vh', background: BRAND.midnight }}>
       {/* Header */}
-      <div style={{ padding: '24px 16px 20px', borderBottom: `1px solid ${BRAND.border}` }}>
+      <div className="setlists-header" style={{ padding: '24px 16px 20px', borderBottom: `1px solid ${BRAND.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
             <h1 style={{ fontFamily: 'Bebas Neue, Impact, sans-serif', fontSize: 48, letterSpacing: 4, color: BRAND.hotPink, margin: 0 }}>
@@ -247,10 +247,11 @@ export default function SetlistsPage() {
             </button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 24 }}>
+          <div className="setlists-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 24 }}>
             {savedSetlists.map(setlist => (
               <div
                 key={setlist.id}
+                className="setlist-card"
                 style={{
                   background: BRAND.card,
                   borderRadius: 16,

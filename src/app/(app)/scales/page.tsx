@@ -109,9 +109,9 @@ export default function ScalesPage() {
   const [showCircleHelp, setShowCircleHelp] = useState(false)
 
   return (
-    <div style={{ minHeight: '100vh', background: BRAND.midnight, color: '#fff', fontFamily: 'system-ui, sans-serif' }}>
+    <div className="scales-shell" style={{ minHeight: '100vh', background: BRAND.midnight, color: '#fff', fontFamily: 'system-ui, sans-serif' }}>
       {/* Page-specific sub-header — NavBar is above this */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 24px', height: 64, background: BRAND.surface, borderBottom: `1px solid ${BRAND.border}`, position: 'sticky', top: 0, zIndex: 50 }}>
+      <div className="scales-tabs" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 24px', height: 64, background: BRAND.surface, borderBottom: `1px solid ${BRAND.border}`, position: 'sticky', top: 0, zIndex: 50 }}>
         <span style={{ fontFamily: 'Bebas Neue, sans-serif', fontSize: 22, letterSpacing: 4, color: '#F0EBF8' }}>SCALES</span>
         <div style={{ display: 'flex', gap: 4, marginLeft: 32 }}>
           {([
@@ -177,7 +177,7 @@ export default function ScalesPage() {
             <p style={{ color: BRAND.muted, fontSize: 14, margin: '0 0 32px', maxWidth: 600 }}>The circle of fifths shows the relationship between the 12 keys. Click any key to see its diatonic chords and relative minor.</p>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 40 }}>
-              <svg width="500" height="500" viewBox="0 0 500 500">
+              <svg className="scales-circle-container" width="500" height="500" viewBox="0 0 500 500">
                 <circle cx="250" cy="250" r="200" fill="none" stroke={BRAND.border} strokeWidth="2" />
                 <circle cx="250" cy="250" r="150" fill="none" stroke={BRAND.border} strokeWidth="1" />
                 <circle cx="250" cy="250" r="100" fill="none" stroke={BRAND.border} strokeWidth="1" />
