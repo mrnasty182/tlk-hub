@@ -8,6 +8,7 @@ import { parseFreeformToSections } from '@/lib/chordpro'
 import { supabase } from '@/lib/supabase'
 import { transposeChordName } from '@/lib/chords'
 import PerformanceView from '@/components/PerformanceView'
+import ExportModal from '@/components/ExportModal'
 
 // ── Demo songs with v2 section structure ───────────────────────
 
@@ -102,6 +103,7 @@ export default function SongsPage() {
   const [selectedId, setSelectedId] = useState<string>(DEMO_SONGS[0].id)
   const [viewMode, setViewMode] = useState<ViewMode>('arrange')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [showExport, setShowExport] = useState(false)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set([DEMO_SONGS[0].sections[0]?.id]))
   const [writeText, setWriteText] = useState('')
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
@@ -535,6 +537,12 @@ export default function SongsPage() {
                 title="Save the current key/chord changes as a new version"
               >+ VERSION</button>
 
+              <button
+                className="export-btn"
+                onClick={() => setShowExport(true)}
+                title="Export to PDF or Word"
+              >📄 EXPORT</button>
+
               <div className="view-toggle">
                 {(['write', 'arrange', 'performance'] as ViewMode[]).map(mode => (
                   <button
@@ -599,6 +607,12 @@ export default function SongsPage() {
           </div>
         </main>
       </div>
+
+      <ExportModal
+        open={showExport}
+        onClose={() => setShowExport(false)}
+        song={selectedSong}
+      />
     </div>
   )
 }
