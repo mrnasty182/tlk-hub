@@ -6,6 +6,7 @@ import { SECTION_TYPES, SECTION_TYPE_LABELS } from '@/types/music'
 import { createEmptySection, uid } from '@/lib/sections'
 import { parseFreeformToSections } from '@/lib/chordpro'
 import { supabase } from '@/lib/supabase'
+import PerformanceView from '@/components/PerformanceView'
 
 // ── Demo songs with v2 section structure ───────────────────────
 
@@ -419,7 +420,24 @@ export default function SongsPage() {
             )}
 
             {viewMode === 'performance' && selectedSong && (
-              <PerformanceMode song={selectedSong} onExit={() => setViewMode('arrange')} />
+              <PerformanceView
+                song={{
+                  id: selectedSong.id,
+                  title: selectedSong.title,
+                  key: selectedSong.key || 'C',
+                  bpm: selectedSong.bpm || 120,
+                  timeSig: selectedSong.time_sig || '4/4',
+                  sections: selectedSong.sections.map(s => ({
+                    id: s.id,
+                    type: s.type,
+                    name: s.name,
+                    chordPro: s.chords,
+                    lyrics: typeof s.lyrics === 'string' ? s.lyrics.split('\n').filter(l => l.trim()) : (s.lyrics || []),
+                    drumGrid: s.drum_grid,
+                  })),
+                }}
+                onExit={() => setViewMode('arrange')}
+              />
             )}
           </div>
         </main>
