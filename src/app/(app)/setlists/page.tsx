@@ -7,6 +7,7 @@ import SetlistBuilder from '@/components/SetlistBuilder'
 import ShowModeModal from '@/components/ShowModeModal'
 import { supabase } from '@/lib/supabase'
 import { loadSetlists, saveSetlist, deleteSetlist as apiDeleteSetlist, migrateLocalStorageSetlistsToSupabase } from '@/lib/setlistsApi'
+import { readWithCache, readCacheOnly, writeWithCache } from '@/lib/persistence'
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -78,27 +79,28 @@ export default function SetlistsPage() {
 
   // ── Load setlists ───────────────────────────────────────────────────────────
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-
-    if (userId) {
-      loadSetlists(userId).then(supabaseSetlists => {
-        const local: SavedSetlist[] = stored ? JSON.parse(stored) : []
-        // Merge: Supabase wins for duplicates
-        const mergedMap = new Map<string, SavedSetlist>()
-        ;[...local, ...supabaseSetlists].forEach(s => mergedMap.set(s.id, s))
-        const merged = Array.from(mergedMap.values())
-        setSavedSetlists(merged)
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
-      })
-    } else {
-      if (stored) {
-        try {
-          setSavedSetlists(JSON.parse(stored))
-        } catch {
-          setSavedSetlists([])
-        }
+    if (!userId) {
+      // Not signed in — read cache only
+      const cached = readCacheOnly<SavedSetlist[]>('setlists')
+      if (cached) setSavedSetlists(cached)
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      // Try migration first
+      const migrated = await migrateLocalStorageSetlistsToSupabase(userId)
+      if (cancelled) return
+      const supabaseSetlists = await loadSetlists(userId)
+      if (cancelled) return
+      setSavedSetlists(supabaseSetlists)
+      // Cache for offline
+      writeWithCache('setlists', supabaseSetlists, async () => {})
+      if (migrated > 0) {
+        console.log(`Migrated ${migrated} setlists from localStorage to Supabase`)
       }
     }
+    load()
+    return () => { cancelled = true }
   }, [userId])
 
   const handleEditSetlist = (setlist: SavedSetlist) => {
@@ -114,19 +116,17 @@ export default function SetlistsPage() {
   const handleBackToLibrary = () => {
     setEditingSetlist(null)
     setIsCreating(false)
-    // Reload from localStorage (will be refreshed on next mount)
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try { setSavedSetlists(JSON.parse(stored)) } catch { setSavedSetlists([]) }
-    }
   }
 
-  const handleDeleteSetlist = (id: string) => {
+  const handleDeleteSetlist = async (id: string) => {
     if (!confirm('Delete this setlist?')) return
     const updated = savedSetlists.filter(s => s.id !== id)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
     setSavedSetlists(updated)
-    if (userId) apiDeleteSetlist(id, userId)
+    if (userId) {
+      await writeWithCache('setlists', updated, () => apiDeleteSetlist(id, userId).then(ok => { if (!ok) throw new Error() }))
+    } else {
+      writeWithCache('setlists', updated, async () => {})
+    }
   }
 
   // Edit or create mode

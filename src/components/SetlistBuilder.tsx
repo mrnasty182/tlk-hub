@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { loadSetlists, saveSetlist, deleteSetlist as apiDeleteSetlist, migrateLocalStorageSetlistsToSupabase } from '@/lib/setlistsApi'
+import { loadSongs } from '@/lib/songsApi'
+import { readCacheOnly, writeWithCache } from '@/lib/persistence'
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -353,17 +355,21 @@ export default function SetlistBuilder({
   const [showMode, setShowMode] = useState(false)
   const [librarySongs, setLibrarySongs] = useState<Song[]>([])
 
-  // Load songs from localStorage
+  // Load songs from cache (Supabase was loaded on setlists page) — also try network if logged in
   useEffect(() => {
-    const stored = localStorage.getItem(SONGS_STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsed: Song[] = JSON.parse(stored)
-        setLibrarySongs(parsed)
-      } catch {
-        setLibrarySongs([])
+    const cached = readCacheOnly<Song[]>('songs')
+    if (cached) setLibrarySongs(cached)
+    // Refresh from network in background if logged in
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadSongs(session.user.id).then(songs => {
+          if (songs.length > 0) {
+            setLibrarySongs(songs)
+            writeWithCache('songs', songs, async () => {})
+          }
+        })
       }
-    }
+    })
   }, [])
 
   const totalDurationMinutes = setlistItems.length * 3
@@ -472,21 +478,20 @@ export default function SetlistBuilder({
       createdAt: initialSetlist?.createdAt || Date.now(),
     }
 
-    // Always save to localStorage
-    const savedSetlists: SavedSetlist[] = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) || '[]'
-    )
+    // Update local state and cache
+    const cached: SavedSetlist[] = readCacheOnly<SavedSetlist[]>('setlists') || []
     let updated: SavedSetlist[]
     if (initialSetlist?.id) {
-      updated = savedSetlists.map(s => (s.id === initialSetlist.id ? newSetlist : s))
+      updated = cached.map(s => (s.id === initialSetlist.id ? newSetlist : s))
     } else {
-      updated = [newSetlist, ...savedSetlists]
+      updated = [newSetlist, ...cached]
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
 
-    // Also save to Supabase if logged in
+    // Persist: Supabase first if logged in
     if (userId) {
-      await saveSetlist(newSetlist, userId)
+      await writeWithCache('setlists', updated, () => saveSetlist(newSetlist, userId).then(ok => { if (!ok) throw new Error() }))
+    } else {
+      writeWithCache('setlists', updated, async () => {})
     }
 
     alert(`Setlist "${setlistName}" saved!`)
