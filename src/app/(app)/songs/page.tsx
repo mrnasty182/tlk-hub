@@ -6,6 +6,7 @@ import { SECTION_TYPES, SECTION_TYPE_LABELS } from '@/types/music'
 import { createEmptySection, uid } from '@/lib/sections'
 import { parseFreeformToSections } from '@/lib/chordpro'
 import { supabase } from '@/lib/supabase'
+import { transposeChordName } from '@/lib/chords'
 import PerformanceView from '@/components/PerformanceView'
 
 // ── Demo songs with v2 section structure ───────────────────────
@@ -21,6 +22,9 @@ const DEMO_SONGS: Song[] = [
     time_sig: '4/4',
     visibility: 'private',
     raw_lyrics: '',
+    version_name: '',
+    parent_song_id: null,
+    transpose_delta: 0,
     sections: [
       {
         id: 's1', type: 'verse', name: 'Verse 1', order_index: 0,
@@ -48,6 +52,9 @@ const DEMO_SONGS: Song[] = [
     time_sig: '4/4',
     visibility: 'private',
     raw_lyrics: '',
+    version_name: '',
+    parent_song_id: null,
+    transpose_delta: 0,
     sections: [
       {
         id: 's1', type: 'intro', name: 'Intro', order_index: 0,
@@ -70,6 +77,9 @@ const DEMO_SONGS: Song[] = [
     time_sig: '6/8',
     visibility: 'private',
     raw_lyrics: '',
+    version_name: '',
+    parent_song_id: null,
+    transpose_delta: 0,
     sections: [
       {
         id: 's1', type: 'verse', name: 'Verse 1', order_index: 0,
@@ -121,6 +131,9 @@ export default function SongsPage() {
       time_sig: '4/4',
       visibility: 'private',
       raw_lyrics: '',
+      version_name: '',
+      parent_song_id: null,
+      transpose_delta: 0,
       sections: [createEmptySection('verse', 0)],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -257,6 +270,9 @@ export default function SongsPage() {
         visibility: row.visibility,
         raw_lyrics: row.raw_lyrics || '',
         sections: row.sections || [],
+        version_name: row.version_name || '',
+        parent_song_id: row.parent_song_id || null,
+        transpose_delta: row.transpose_delta ?? 0,
         created_at: row.created_at,
         updated_at: row.updated_at,
       }))
@@ -292,12 +308,94 @@ export default function SongsPage() {
         time_sig: sel.time_sig,
         sections: sel.sections,
         raw_lyrics: sel.raw_lyrics || '',
+        version_name: sel.version_name || '',
+        parent_song_id: sel.parent_song_id || null,
+        transpose_delta: sel.transpose_delta ?? 0,
         updated_at: new Date().toISOString(),
       })
     }
     const timer = setTimeout(persist, 800)
     return () => clearTimeout(timer)
   }, [songs, selectedId])
+
+  // ── Transpose ───────────────────────────────────────────────
+  //
+  // Transpose all section chords in the selected song by N semitones,
+  // and shift the song's key by the same amount. Persists via the existing
+  // debounced upsert.
+  const transposeSong = useCallback((semitones: number) => {
+    if (!selectedSong) return
+    const newKey = transposeChordName(selectedSong.key || 'C', semitones)
+    const newSections = selectedSong.sections.map(s => ({
+      ...s,
+      chords: s.chords
+        ? s.chords.replace(/\[?([A-G][#b]?[a-z0-9susmajdim+\-#]*)\]?/g, (full: string, chord: string) => {
+            const t = transposeChordName(chord, semitones)
+            return full.startsWith('[') ? `[${t}]` : t
+          })
+        : s.chords,
+    }))
+    updateSong(selectedSong.id, {
+      key: newKey,
+      sections: newSections,
+      transpose_delta: (selectedSong.transpose_delta ?? 0) + semitones,
+    })
+  }, [selectedSong, updateSong])
+
+  // ── Save as new version ─────────────────────────────────────
+  //
+  // Creates a new song row that links to this one via parent_song_id,
+  // so the song library shows them grouped. User gives the version a name.
+  const saveAsNewVersion = useCallback(async (label: string) => {
+    if (!selectedSong) return
+    const { data: { session } } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) return
+
+    const parentId = selectedSong.parent_song_id ?? selectedSong.id
+    const newId = uid()
+    const { error } = await supabase.from('songs').insert({
+      id: newId,
+      user_id: userId,
+      band_id: selectedSong.band_id,
+      title: selectedSong.title,
+      key: selectedSong.key,
+      bpm: selectedSong.bpm,
+      time_sig: selectedSong.time_sig,
+      visibility: selectedSong.visibility,
+      raw_lyrics: selectedSong.raw_lyrics || '',
+      sections: selectedSong.sections,
+      version_name: label,
+      parent_song_id: parentId,
+      transpose_delta: selectedSong.transpose_delta ?? 0,
+    })
+    if (error) {
+      console.error('saveAsNewVersion:', error)
+      return
+    }
+    const newSong: Song = {
+      ...selectedSong,
+      id: newId,
+      version_name: label,
+      parent_song_id: parentId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    setSongs(prev => [...prev, newSong])
+    setSelectedId(newId)
+    setViewMode('arrange')
+  }, [selectedSong])
+
+  // ── Versions of this song ───────────────────────────────────
+  //
+  // A "version group" is the parent_id (or self if no parent).
+  const versionsOfSelected = useMemo(() => {
+    if (!selectedSong) return []
+    const groupId = selectedSong.parent_song_id ?? selectedSong.id
+    return songs.filter(s =>
+      s.id === groupId || s.parent_song_id === groupId
+    )
+  }, [songs, selectedSong])
 
   // ── Render ─────────────────────────────────────────────────
 
@@ -341,6 +439,11 @@ export default function SongsPage() {
                 onChange={e => updateSong(selectedSong.id, { title: e.target.value })}
                 placeholder="Untitled"
               />
+              {selectedSong?.version_name && (
+                <span className="version-badge" title={`Version: ${selectedSong.version_name}`}>
+                  {selectedSong.version_name}
+                </span>
+              )}
             </div>
 
             <div className="topbar-meta">
@@ -378,6 +481,60 @@ export default function SongsPage() {
             </div>
 
             <div className="topbar-right">
+              <div className="transpose-controls">
+                <button
+                  className="transpose-btn"
+                  onClick={() => transposeSong(-1)}
+                  title="Down 1 semitone"
+                >−1</button>
+                <button
+                  className="transpose-btn transpose-bigger"
+                  onClick={() => transposeSong(-2)}
+                  title="Down whole step"
+                >−2</button>
+                <span className="transpose-delta" title="Total semitones from original">
+                  {selectedSong?.transpose_delta ? `${selectedSong.transpose_delta > 0 ? '+' : ''}${selectedSong.transpose_delta}` : '0'}
+                </span>
+                <button
+                  className="transpose-btn transpose-bigger"
+                  onClick={() => transposeSong(2)}
+                  title="Up whole step"
+                >+2</button>
+                <button
+                  className="transpose-btn"
+                  onClick={() => transposeSong(1)}
+                  title="Up 1 semitone"
+                >+1</button>
+              </div>
+
+              {versionsOfSelected.length > 1 && (
+                <select
+                  className="version-picker"
+                  value={selectedId}
+                  onChange={e => setSelectedId(e.target.value)}
+                  title="Switch between versions of this song"
+                >
+                  {versionsOfSelected.map(v => (
+                    <option key={v.id} value={v.id}>
+                      {v.version_name || 'Original'}
+                      {v.transpose_delta ? ` (${v.transpose_delta > 0 ? '+' : ''}${v.transpose_delta})` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <button
+                className="save-version-btn"
+                onClick={() => {
+                  const label = window.prompt(
+                    'Name this version (e.g. "Acoustic", "Live in D", "Boy\'s Key"):',
+                    ''
+                  )
+                  if (label && label.trim()) saveAsNewVersion(label.trim())
+                }}
+                title="Save the current key/chord changes as a new version"
+              >+ VERSION</button>
+
               <div className="view-toggle">
                 {(['write', 'arrange', 'performance'] as ViewMode[]).map(mode => (
                   <button
@@ -999,6 +1156,79 @@ const styles = `
   .save-idle, .save-saved { color: var(--lk-teal); }
   .save-saving { color: var(--lk-muted); }
 
+  /* ── Transpose + Version Controls ── */
+  .version-badge {
+    display: inline-block;
+    margin-left: 12px;
+    padding: 3px 10px;
+    background: var(--lk-violet);
+    color: var(--lk-white);
+    border-radius: 12px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .transpose-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+  }
+  .transpose-btn {
+    background: var(--lk-black);
+    border: 1px solid var(--lk-pink);
+    color: var(--lk-pink);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 32px;
+    transition: background 0.1s, color 0.1s;
+  }
+  .transpose-btn:hover {
+    background: var(--lk-pink);
+    color: var(--lk-black);
+  }
+  .transpose-bigger { font-size: 13px; }
+  .transpose-delta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--lk-teal);
+    min-width: 24px;
+    text-align: center;
+    padding: 0 4px;
+  }
+  .version-picker {
+    background: var(--lk-black);
+    border: 1px solid var(--lk-violet);
+    color: var(--lk-white);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    max-width: 140px;
+  }
+  .save-version-btn {
+    background: transparent;
+    border: 1px dashed var(--lk-gold);
+    color: var(--lk-gold);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+  }
+  .save-version-btn:hover {
+    background: var(--lk-gold);
+    color: var(--lk-black);
+  }
+
   /* Content Area */
   .editor-content {
     flex: 1;
@@ -1463,7 +1693,11 @@ const styles = `
     .topbar-left { flex: 1 1 100%; min-width: 100%; }
     .song-title-input { font-size: 18px; padding: 8px 10px; width: 100%; }
     .topbar-meta { flex: 1 1 auto; flex-wrap: wrap; gap: 6px; }
-    .topbar-right { flex: 1 1 auto; justify-content: space-between; }
+    .topbar-right { flex: 1 1 auto; justify-content: space-between; flex-wrap: wrap; }
+    .transpose-controls { padding: 0; gap: 3px; }
+    .transpose-btn { min-width: 36px; min-height: 36px; padding: 6px 8px; font-size: 12px; }
+    .save-version-btn { min-height: 36px; padding: 6px 10px; }
+    .version-picker { min-height: 36px; }
     .bpm-control { flex: 1; }
     .bpm-input { width: 100%; min-height: 40px; }
     .editor-content { padding: 12px; }

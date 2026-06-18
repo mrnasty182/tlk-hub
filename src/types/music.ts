@@ -102,6 +102,12 @@ export interface Song {
   visibility: SongVisibility
   raw_lyrics: string
   sections: Section[]
+  /** Optional version label — e.g. "Acoustic", "Live in D", "Boy's Key" */
+  version_name: string
+  /** If this is a variant of another song, link to the parent */
+  parent_song_id: string | null
+  /** Semitones this version is transposed from the original */
+  transpose_delta: number
   created_at: string
   updated_at: string
 }
