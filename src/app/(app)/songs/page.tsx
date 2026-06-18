@@ -7,6 +7,7 @@ import { createEmptySection, uid } from '@/lib/sections'
 import { parseFreeformToSections } from '@/lib/chordpro'
 import { supabase } from '@/lib/supabase'
 import { transposeChordName } from '@/lib/chords'
+import { detectKey } from '@/lib/keyDetect'
 import PerformanceView from '@/components/PerformanceView'
 import ExportModal from '@/components/ExportModal'
 
@@ -104,6 +105,9 @@ export default function SongsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('arrange')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [showExport, setShowExport] = useState(false)
+  const [tapTimes, setTapTimes] = useState<number[]>([])
+  const [keySuggestion, setKeySuggestion] = useState<{ key: string; confidence: number } | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set([DEMO_SONGS[0].sections[0]?.id]))
   const [writeText, setWriteText] = useState('')
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
@@ -399,6 +403,76 @@ export default function SongsPage() {
     )
   }, [songs, selectedSong])
 
+  // ── Library search ──────────────────────────────────────────
+  //
+  // Filters songs by title + key + chord names + section names + version name.
+  // Empty query → show all. Case-insensitive substring match.
+  const filteredSongs = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return songs
+    return songs.filter(s => {
+      // Title
+      if (s.title.toLowerCase().includes(q)) return true
+      // Key
+      if ((s.key || '').toLowerCase().includes(q)) return true
+      // Version name
+      if ((s.version_name || '').toLowerCase().includes(q)) return true
+      // Sections: chords + lyrics + name
+      for (const sec of s.sections) {
+        if ((sec.name || '').toLowerCase().includes(q)) return true
+        if (sec.chords && sec.chords.toLowerCase().includes(q)) return true
+        if (sec.lyrics && sec.lyrics.toLowerCase().includes(q)) return true
+        if (sec.notes && sec.notes.toLowerCase().includes(q)) return true
+      }
+      return false
+    })
+  }, [songs, searchQuery])
+
+  // ── Tap tempo ───────────────────────────────────────────────
+  //
+  // Tap the big button. We average the intervals between the last N taps (up to 8)
+  // and convert to BPM. Reset if the user pauses more than 2 seconds.
+  const TAP_WINDOW_MS = 2000
+  const handleTap = useCallback(() => {
+    const now = Date.now()
+    setTapTimes(prev => {
+      const filtered = prev.filter(t => now - t < TAP_WINDOW_MS)
+      const next = [...filtered, now].slice(-8)
+      if (next.length < 2) return next
+      // Average interval
+      let total = 0
+      for (let i = 1; i < next.length; i++) total += next[i] - next[i - 1]
+      const avgMs = total / (next.length - 1)
+      const bpm = Math.round(60000 / avgMs)
+      if (bpm >= 40 && bpm <= 300 && selectedSong) {
+        updateSong(selectedSong.id, { bpm })
+      }
+      return next
+    })
+  }, [selectedSong, updateSong])
+
+  // ── Key auto-detect ─────────────────────────────────────────
+  //
+  // Scan all section chords, return the most likely key. Show a confirmation
+  // banner with confidence — user clicks to accept, or dismisses.
+  const handleDetectKey = useCallback(() => {
+    if (!selectedSong) return
+    const chordProStrings = selectedSong.sections.map(s => s.chords).filter(Boolean)
+    const result = detectKey(chordProStrings)
+    if (result.chordCounts && Object.keys(result.chordCounts).length === 0) {
+      setKeySuggestion({ key: '—', confidence: 0 })
+      return
+    }
+    setKeySuggestion({ key: result.key, confidence: result.confidence })
+  }, [selectedSong])
+
+  const acceptKeySuggestion = useCallback(() => {
+    if (keySuggestion && selectedSong && keySuggestion.key !== '—') {
+      updateSong(selectedSong.id, { key: keySuggestion.key })
+    }
+    setKeySuggestion(null)
+  }, [keySuggestion, selectedSong, updateSong])
+
   // ── Render ─────────────────────────────────────────────────
 
   return (
@@ -412,21 +486,46 @@ export default function SongsPage() {
             <span className="sidebar-title">SONGS</span>
             <button className="new-song-btn" onClick={addSong}>+ NEW</button>
           </div>
+          <div className="sidebar-search">
+            <input
+              type="search"
+              className="search-input"
+              placeholder="🔍 search title, key, chord, lyric…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                className="search-clear"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+              >✕</button>
+            )}
+          </div>
           <div className="song-list">
-            {songs.map(song => (
-              <div
-                key={song.id}
-                className={`song-item ${selectedId === song.id ? 'active' : ''}`}
-                onClick={() => setSelectedId(song.id)}
-              >
-                <div className="song-item-title">{song.title}</div>
-                <div className="song-item-meta">
-                  <span className="meta-key">{song.key}</span>
-                  <span className="meta-bpm">{song.bpm} BPM</span>
-                  <span className="meta-sig">{song.time_sig}</span>
+            {filteredSongs.length === 0 ? (
+              <div className="song-empty">No songs match "{searchQuery}"</div>
+            ) : (
+              filteredSongs.map(song => (
+                <div
+                  key={song.id}
+                  className={`song-item ${selectedId === song.id ? 'active' : ''}`}
+                  onClick={() => setSelectedId(song.id)}
+                >
+                  <div className="song-item-title">
+                    {song.title}
+                    {song.version_name && (
+                      <span className="song-item-version">{song.version_name}</span>
+                    )}
+                  </div>
+                  <div className="song-item-meta">
+                    <span className="meta-key">{song.key}</span>
+                    <span className="meta-bpm">{song.bpm} BPM</span>
+                    <span className="meta-sig">{song.time_sig}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </aside>
 
@@ -458,6 +557,11 @@ export default function SongsPage() {
                   <option key={k} value={k}>{k}</option>
                 ))}
               </select>
+              <button
+                className="detect-key-btn"
+                onClick={handleDetectKey}
+                title="Guess the key from the chord progression"
+              >🔍</button>
 
               <div className="bpm-control">
                 <label>BPM</label>
@@ -469,6 +573,11 @@ export default function SongsPage() {
                   min={40}
                   max={300}
                 />
+                <button
+                  className="tap-btn"
+                  onClick={handleTap}
+                  title="Tap to set tempo (4+ taps)"
+                >TAP</button>
               </div>
 
               <select
@@ -613,6 +722,23 @@ export default function SongsPage() {
         onClose={() => setShowExport(false)}
         song={selectedSong}
       />
+
+      {keySuggestion && (
+        <div className="key-suggestion-banner">
+          {keySuggestion.key === '—' ? (
+            <>
+              <span>🔍 No chords found to detect a key from.</span>
+              <button onClick={() => setKeySuggestion(null)}>✕</button>
+            </>
+          ) : (
+            <>
+              <span>🔍 Looks like <strong>{keySuggestion.key}</strong> ({Math.round(keySuggestion.confidence * 100)}% confidence)</span>
+              <button className="key-accept-btn" onClick={acceptKeySuggestion}>✓ Use {keySuggestion.key}</button>
+              <button onClick={() => setKeySuggestion(null)}>✕</button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1241,6 +1367,135 @@ const styles = `
   .save-version-btn:hover {
     background: var(--lk-gold);
     color: var(--lk-black);
+  }
+  .tap-btn {
+    background: var(--lk-black);
+    border: 1px solid var(--lk-teal);
+    color: var(--lk-teal);
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    min-width: 44px;
+    min-height: 28px;
+    user-select: none;
+  }
+  .tap-btn:active, .tap-btn.tapping {
+    background: var(--lk-teal);
+    color: var(--lk-black);
+    transform: scale(0.95);
+  }
+  .detect-key-btn {
+    background: var(--lk-black);
+    border: 1px solid var(--lk-violet);
+    color: var(--lk-violet);
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 36px;
+    min-height: 32px;
+  }
+  .detect-key-btn:hover {
+    background: var(--lk-violet);
+    color: var(--lk-white);
+  }
+  .key-suggestion-banner {
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--lk-violet);
+    color: var(--lk-white);
+    padding: 12px 20px;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 1000;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .key-suggestion-banner strong {
+    color: var(--lk-gold);
+    font-size: 16px;
+  }
+  .key-suggestion-banner button {
+    background: transparent;
+    border: 1px solid var(--lk-white);
+    color: var(--lk-white);
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .key-accept-btn {
+    background: var(--lk-teal) !important;
+    color: var(--lk-black) !important;
+    border-color: var(--lk-teal) !important;
+    font-weight: 700;
+  }
+
+  /* ── Sidebar Search ── */
+  .sidebar-search {
+    padding: 0 14px 10px;
+    position: relative;
+  }
+  .search-input {
+    width: 100%;
+    background: var(--lk-black);
+    border: 1px solid var(--lk-subtle);
+    color: var(--lk-white);
+    padding: 8px 32px 8px 10px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .search-input:focus {
+    outline: none;
+    border-color: var(--lk-pink);
+  }
+  .search-input::placeholder {
+    color: var(--lk-muted);
+  }
+  .search-clear {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: var(--lk-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px 8px;
+  }
+  .search-clear:hover { color: var(--lk-pink); }
+  .song-empty {
+    color: var(--lk-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 16px;
+    text-align: center;
+    font-style: italic;
+  }
+  .song-item-version {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: var(--lk-violet);
+    color: var(--lk-white);
+    border-radius: 8px;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    vertical-align: middle;
   }
 
   /* Content Area */
