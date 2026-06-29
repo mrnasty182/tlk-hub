@@ -437,6 +437,16 @@ export default function SetlistBuilder({
     }
   }
 
+  const handleMoveItem = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return
+    if (direction === 'down' && index === setlistItems.length - 1) return
+    const reordered = [...setlistItems]
+    const swapWith = direction === 'up' ? index - 1 : index + 1
+    ;[reordered[index], reordered[swapWith]] = [reordered[swapWith], reordered[index]]
+    const updated = reordered.map((item, i) => ({ ...item, order: i + 1 }))
+    setSetlistItems(updated)
+  }
+
   const handleRemoveItem = (index: number) => {
     const updated = setlistItems
       .filter((_, i) => i !== index)
@@ -464,14 +474,18 @@ export default function SetlistBuilder({
   }, [])
 
   // ── Save ───────────────────────────────────────────────────────────────────
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
   const handleSave = useCallback(async () => {
     if (setlistItems.length === 0) {
       alert('Add some songs to your setlist first!')
       return
     }
 
+    setSaveStatus('saving')
+
     const newSetlist: SavedSetlist = {
-      id: initialSetlist?.id || Date.now().toString(),
+      id: initialSetlist?.id || crypto.randomUUID(),
       name: setlistName,
       items: setlistItems,
       totalDuration: totalDurationMinutes,
@@ -488,13 +502,24 @@ export default function SetlistBuilder({
     }
 
     // Persist: Supabase first if logged in
-    if (userId) {
-      await writeWithCache('setlists', updated, () => saveSetlist(newSetlist, userId).then(ok => { if (!ok) throw new Error() }))
-    } else {
-      writeWithCache('setlists', updated, async () => {})
-    }
+    try {
+      if (userId) {
+        const result = await writeWithCache('setlists', updated, () => saveSetlist(newSetlist, userId).then(ok => { if (!ok) throw new Error('Save failed') }))
+        if (!result.ok && !result.queued) {
+          setSaveStatus('error')
+          alert(`Failed to save "${setlistName}". Check your connection and try again.`)
+          return
+        }
+      } else {
+        await writeWithCache('setlists', updated, async () => {})
+      }
 
-    alert(`Setlist "${setlistName}" saved!`)
+      setSaveStatus('saved')
+      alert(`Setlist "${setlistName}" saved!`)
+    } catch {
+      setSaveStatus('error')
+      alert(`Failed to save "${setlistName}". Check your connection and try again.`)
+    }
   }, [setlistItems, setlistName, totalDurationMinutes, initialSetlist, userId])
 
   const handleDoubleClick = (songId: string) => {
@@ -833,6 +858,45 @@ export default function SetlistBuilder({
                       <span style={{ color: BRAND.glamGold }}>Key: {item.key}</span>
                       <span style={{ color: BRAND.electricTeal }}>{item.bpm} BPM</span>
                     </div>
+                  </div>
+                  {/* Reorder buttons */}
+                  <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleMoveItem(index, 'up') }}
+                      disabled={index === 0}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: index === 0 ? BRAND.border : BRAND.muted,
+                        cursor: index === 0 ? 'default' : 'pointer',
+                        fontSize: 12,
+                        padding: '1px 6px',
+                        lineHeight: 1,
+                        transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={(e) => { if (index > 0) e.currentTarget.style.color = BRAND.electricTeal }}
+                      onMouseLeave={(e) => { if (index > 0) e.currentTarget.style.color = BRAND.muted }}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleMoveItem(index, 'down') }}
+                      disabled={index === setlistItems.length - 1}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: index === setlistItems.length - 1 ? BRAND.border : BRAND.muted,
+                        cursor: index === setlistItems.length - 1 ? 'default' : 'pointer',
+                        fontSize: 12,
+                        padding: '1px 6px',
+                        lineHeight: 1,
+                        transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={(e) => { if (index < setlistItems.length - 1) e.currentTarget.style.color = BRAND.electricTeal }}
+                      onMouseLeave={(e) => { if (index < setlistItems.length - 1) e.currentTarget.style.color = BRAND.muted }}
+                    >
+                      ▼
+                    </button>
                   </div>
                   <button
                     onClick={() => handleRemoveItem(index)}
