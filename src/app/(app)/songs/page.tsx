@@ -305,7 +305,18 @@ export default function SongsPage() {
       if (!sel) return
       // Skip demo songs (id starts with 'demo-')
       if (sel.id.startsWith('demo-')) return
-      await supabase.from('songs').upsert({
+      // For new songs (no user_id set), fetch the user's band_id so the song is band-shared by default
+      let bandId = sel.band_id
+      if (!bandId) {
+        const { data: membership } = await supabase
+          .from('band_members')
+          .select('band_id')
+          .eq('user_id', userId)
+          .limit(1)
+          .maybeSingle()
+        bandId = membership?.band_id ?? null
+      }
+      const { error } = await supabase.from('songs').upsert({
         id: sel.id,
         user_id: userId,
         title: sel.title,
@@ -317,8 +328,17 @@ export default function SongsPage() {
         version_name: sel.version_name || '',
         parent_song_id: sel.parent_song_id || null,
         transpose_delta: sel.transpose_delta ?? 0,
+        visibility: bandId ? 'band' : (sel.visibility || 'private'),
+        band_id: bandId,
+        created_at: sel.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
+      if (error) {
+        console.error('Persist failed for song', sel.id, ':', error.message)
+      } else if (!sel.user_id) {
+        // First-time save: update local state so band_id is set
+        setSongs(prev => prev.map(s => s.id === sel.id ? { ...s, user_id: userId, band_id: bandId, visibility: bandId ? 'band' : s.visibility } : s))
+      }
     }
     const timer = setTimeout(persist, 800)
     return () => clearTimeout(timer)
@@ -553,9 +573,18 @@ export default function SongsPage() {
                 value={selectedSong?.key ?? ''}
                 onChange={e => updateSong(selectedSong.id, { key: e.target.value })}
               >
-                {['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Am','A#m','Bm','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m'].map(k => (
-                  <option key={k} value={k}>{k}</option>
-                ))}
+                {(() => {
+                  const roots = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+                  const opts: string[] = []
+                  for (const r of roots) {
+                    opts.push(r)
+                    opts.push(r + ' major')
+                    opts.push(r + ' minor')
+                  }
+                  return opts.map(k => (
+                    <option key={k} value={k}>{k}</option>
+                  ))
+                })()}
               </select>
               <button
                 className="detect-key-btn"
