@@ -279,7 +279,6 @@ export default function SongsPage() {
       const { data, error } = await supabase
         .from('songs')
         .select('*')
-        .eq('user_id', userId)
         .order('updated_at', { ascending: false })
       if (cancelled || error || !data) return
 

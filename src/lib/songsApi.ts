@@ -5,7 +5,6 @@ export async function loadSongs(userId: string): Promise<Song[]> {
   const { data, error } = await supabase
     .from('songs')
     .select('*')
-    .eq('user_id', userId)
     .order('updated_at', { ascending: false })
 
   if (error) {
