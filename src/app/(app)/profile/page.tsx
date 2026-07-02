@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase'
 import { INSTRUMENT_LABELS, type InstrumentType } from '@/types/music'
 
 const INSTRUMENTS: InstrumentType[] = ['guitar_chords', 'guitar_tab', 'bass_tab', 'drums']
@@ -15,7 +15,6 @@ export default function Profile() {
   const [instrument, setInstrument] = useState<InstrumentType | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const supabase = createClient()
 
   useEffect(() => {
     const init = async () => {

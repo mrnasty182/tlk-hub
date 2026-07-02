@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import type { Section, SectionType, Song } from '@/types/music'
 import { SECTION_TYPES, SECTION_TYPE_LABELS } from '@/types/music'
-import { createEmptySection, uid } from '@/lib/sections'
+import { createEmptySection } from '@/lib/sections'
 import { parseFreeformToSections } from '@/lib/chordpro'
 import { supabase } from '@/lib/supabase'
 import { transposeChordName } from '@/lib/chords'
@@ -128,7 +128,7 @@ export default function SongsPage() {
 
   const addSong = useCallback(() => {
     const newSong: Song = {
-      id: uid(),
+      id: crypto.randomUUID(),
       user_id: null,
       band_id: null,
       title: 'New Song',
@@ -149,6 +149,24 @@ export default function SongsPage() {
     setExpandedSections(new Set([newSong.sections[0].id]))
     setViewMode('arrange')
   }, [])
+
+  const deleteSong = useCallback(async (id: string) => {
+    if (!confirm('Delete this song permanently? This cannot be undone.')) return
+    setSongs(prev => {
+      const next = prev.filter(s => s.id !== id)
+      if (selectedId === id) {
+        setSelectedId(next[0]?.id ?? '')
+      }
+      return next
+    })
+    // Delete from Supabase
+    try {
+      const { error } = await supabase.from('songs').delete().eq('id', id)
+      if (error) console.error('Delete failed:', error.message)
+    } catch (e) {
+      console.error('Delete error:', e)
+    }
+  }, [selectedId])
 
   // ── Section CRUD ───────────────────────────────────────────
 
@@ -355,9 +373,9 @@ export default function SongsPage() {
     const newSections = selectedSong.sections.map(s => ({
       ...s,
       chords: s.chords
-        ? s.chords.replace(/\[?([A-G][#b]?[a-z0-9susmajdim+\-#]*)\]?/g, (full: string, chord: string) => {
+        ? s.chords.replace(/\[([A-G][#b]?[a-z0-9susmajdim+\-#]*)\]/g, (full: string, chord: string) => {
             const t = transposeChordName(chord, semitones)
-            return full.startsWith('[') ? `[${t}]` : t
+            return `[${t}]`
           })
         : s.chords,
     }))
@@ -379,7 +397,7 @@ export default function SongsPage() {
     if (!userId) return
 
     const parentId = selectedSong.parent_song_id ?? selectedSong.id
-    const newId = uid()
+    const newId = crypto.randomUUID()
     const { error } = await supabase.from('songs').insert({
       id: newId,
       user_id: userId,
@@ -680,6 +698,12 @@ export default function SongsPage() {
                 onClick={() => setShowExport(true)}
                 title="Export to PDF or Word"
               >📄 EXPORT</button>
+
+              <button
+                className="delete-song-btn"
+                onClick={() => selectedSong && deleteSong(selectedSong.id)}
+                title="Delete this song permanently"
+              >🗑 DELETE</button>
 
               <div className="view-toggle">
                 {(['write', 'arrange', 'performance'] as ViewMode[]).map(mode => (
@@ -1397,6 +1421,23 @@ const styles = `
     background: var(--lk-gold);
     color: var(--lk-black);
   }
+  .delete-song-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 45, 155, 0.3);
+    color: rgba(255, 45, 155, 0.7);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    padding: 6px 10px;
+    transition: all 0.15s;
+    max-width: 140px;
+  }
+  .delete-song-btn:hover {
+    border-color: var(--lk-pink);
+    color: var(--lk-pink);
+    background: rgba(255, 45, 155, 0.05);
+  }
   .tap-btn {
     background: var(--lk-black);
     border: 1px solid var(--lk-teal);
@@ -1995,6 +2036,7 @@ const styles = `
     .transpose-controls { padding: 0; gap: 3px; }
     .transpose-btn { min-width: 36px; min-height: 36px; padding: 6px 8px; font-size: 12px; }
     .save-version-btn { min-height: 36px; padding: 6px 10px; }
+    .delete-song-btn { min-height: 36px; padding: 6px 10px; }
     .version-picker { min-height: 36px; }
     .bpm-control { flex: 1; }
     .bpm-input { width: 100%; min-height: 40px; }

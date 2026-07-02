@@ -44,15 +44,10 @@ export default function ExportModal({ open, onClose, song, setlist }: Props) {
   )
   const [setlistMode, setSetlistMode] = useState<SetlistMode>('quick')
 
-  if (!open) return null
-
   const isSetlist = !!setlist
   const songs = setlist?.songs ?? (song ? [song] : [])
 
-  const toggleOpt = (k: SectionOption) =>
-    setOpts(prev => ({ ...prev, [k]: !prev[k] }))
-
-  // ── Estimate runtime (seconds per beat × total beats at 4/4 default) ──
+  // ── Estimate runtime (must be before early return — Rules of Hooks) ──
   const totalRuntime = useMemo(() => {
     let sec = 0
     songs.forEach(s => {
@@ -65,6 +60,11 @@ export default function ExportModal({ open, onClose, song, setlist }: Props) {
     const r = Math.floor(sec % 60)
     return `${m}:${r.toString().padStart(2, '0')}`
   }, [songs])
+
+  if (!open) return null
+
+  const toggleOpt = (k: SectionOption) =>
+    setOpts(prev => ({ ...prev, [k]: !prev[k] }))
 
   // ── PDF print handler ─────────────────────────────────────
   const handlePrint = () => {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, forwardRef, useImperativeHandle, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 const BRAND = {
   hotPink: '#FF2D9B',
@@ -57,7 +58,7 @@ const MONTHS = [
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const TODAY = new Date(2026, 4, 20);
+const TODAY = new Date();
 
 function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
@@ -77,8 +78,8 @@ export interface JamCalendarHandle {
 }
 
 const JamCalendar = forwardRef<JamCalendarHandle>((_, ref) => {
-  const [currentMonth, setCurrentMonth] = useState(TODAY.getMonth());
-  const [currentYear, setCurrentYear] = useState(TODAY.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(() => new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
   const [events, setEvents] = useState<CalendarEvent[]>(INITIAL_EVENTS);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -88,19 +89,70 @@ const JamCalendar = forwardRef<JamCalendarHandle>((_, ref) => {
   const [eventVenue, setEventVenue] = useState('');
   const [eventLink, setEventLink] = useState('');
 
-  // ── Persist events to localStorage so dashboard can read them ──
+  // ── Fix date after hydration (SSR prerender uses build-time date) ──
   useEffect(() => {
-    const stored = localStorage.getItem('tlk-events-v2')
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as CalendarEvent[]
-        // Convert date strings back to Date objects
-        const withDates = parsed.map(e => ({ ...e, date: new Date(e.date) }))
-        setEvents(withDates)
-      } catch { /* use defaults */ }
-    }
-  }, [])
+    const now = new Date();
+    setCurrentMonth(now.getMonth());
+    setCurrentYear(now.getFullYear());
+  }, []);
 
+  // ── Auth + band_id ──
+  const [userId, setUserId] = useState<string | null>(null);
+  const [bandId, setBandId] = useState<string | null>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setUserId(session.user.id);
+        const { data: member } = await supabase
+          .from('band_members')
+          .select('band_id')
+          .eq('user_id', session.user.id)
+          .single();
+        if (member?.band_id) setBandId(member.band_id);
+      }
+    });
+  }, []);
+
+  // ── Load events from Supabase (fallback to localStorage) ──
+  useEffect(() => {
+    if (!userId) {
+      // Not logged in — use localStorage fallback
+      const stored = localStorage.getItem('tlk-events-v2')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as CalendarEvent[]
+          const withDates = parsed.map(e => ({ ...e, date: new Date(e.date) }))
+          setEvents(withDates)
+        } catch { /* use defaults */ }
+      }
+      return
+    }
+    let cancelled = false
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('event_date', { ascending: true })
+      if (cancelled || error) return
+      if (data && data.length > 0) {
+        const mapped: CalendarEvent[] = data.map(row => ({
+          id: row.id,
+          date: new Date(row.event_date),
+          type: row.event_type || 'rehearsal',
+          time: row.event_time || '7:00 PM',
+          notes: row.notes || '',
+          venue: row.venue || undefined,
+          link: row.link || undefined,
+        }))
+        setEvents(mapped)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [userId])
+
+  // ── Persist to localStorage as offline cache ──
   useEffect(() => {
     const toStore = events.map(e => ({
       ...e,
@@ -153,8 +205,9 @@ const JamCalendar = forwardRef<JamCalendarHandle>((_, ref) => {
   };
 
   const goToToday = () => {
-    setCurrentMonth(TODAY.getMonth());
-    setCurrentYear(TODAY.getFullYear());
+    const now = new Date();
+    setCurrentMonth(now.getMonth());
+    setCurrentYear(now.getFullYear());
   };
 
   const closeModal = () => {
@@ -162,10 +215,10 @@ const JamCalendar = forwardRef<JamCalendarHandle>((_, ref) => {
     setSelectedDate(null);
   };
 
-  const saveEvent = () => {
+  const saveEvent = async () => {
     if (!selectedDate) return;
     const newEvent: CalendarEvent = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       date: new Date(selectedDate),
       type: eventType,
       time: eventTime,
@@ -175,6 +228,31 @@ const JamCalendar = forwardRef<JamCalendarHandle>((_, ref) => {
     };
     setEvents([...events, newEvent]);
     closeModal();
+
+    // Save to Supabase
+    if (userId) {
+      const { error } = await supabase.from('events').insert({
+        id: newEvent.id,
+        user_id: userId,
+        band_id: bandId,
+        title: eventNotes || (eventType === 'gig' ? 'Gig' : 'Rehearsal'),
+        event_type: eventType,
+        event_date: newEvent.date.toISOString().split('T')[0],
+        event_time: eventTime,
+        venue: eventVenue || '',
+        notes: eventNotes,
+        link: eventLink || '',
+      });
+      if (error) console.error('Event save failed:', error.message);
+    }
+  };
+
+  const deleteEvent = async (eventId: string) => {
+    setEvents(prev => prev.filter(e => e.id !== eventId));
+    if (userId) {
+      const { error } = await supabase.from('events').delete().eq('id', eventId);
+      if (error) console.error('Event delete failed:', error.message);
+    }
   };
 
   const getEventsForDay = (day: number): CalendarEvent[] => {
@@ -270,8 +348,23 @@ const JamCalendar = forwardRef<JamCalendarHandle>((_, ref) => {
                     🔗 {evt.type === 'gig' ? `GIG${evt.venue ? ` • ${evt.venue}` : ''}` : 'Rehearsal'}
                   </a>
                 ) : (
-                  <span>{evt.type === 'gig' ? `GIG${evt.venue ? ` • ${evt.venue}` : ''}` : 'Rehearsal'}</span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{evt.type === 'gig' ? `GIG${evt.venue ? ` • ${evt.venue}` : ''}` : 'Rehearsal'}</span>
                 )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteEvent(evt.id) }}
+                  style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    border: 'none',
+                    borderRadius: '3px',
+                    color: 'rgba(255,255,255,0.6)',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    padding: '0 4px',
+                    lineHeight: '16px',
+                    flexShrink: 0,
+                  }}
+                  title="Delete event"
+                >×</button>
               </div>
             ))}
           </div>

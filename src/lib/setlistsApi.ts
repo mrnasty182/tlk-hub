@@ -31,10 +31,10 @@ interface SetlistRow {
 }
 
 export async function loadSetlists(userId: string): Promise<SavedSetlist[]> {
+  // Load all setlists visible to this user (own + band-visible)
   const { data, error } = await supabase
     .from('setlists')
     .select('*')
-    .eq('user_id', userId)
     .order('created_at', { ascending: false })
 
   if (error) {
@@ -52,6 +52,15 @@ export async function loadSetlists(userId: string): Promise<SavedSetlist[]> {
 }
 
 export async function saveSetlist(setlist: SavedSetlist, userId: string): Promise<boolean> {
+  // Look up band_id for this user
+  let bandId: string | null = null
+  const { data: member } = await supabase
+    .from('band_members')
+    .select('band_id')
+    .eq('user_id', userId)
+    .single()
+  if (member?.band_id) bandId = member.band_id
+
   const { error } = await supabase.from('setlists').upsert({
     id: setlist.id,
     user_id: userId,
@@ -59,6 +68,8 @@ export async function saveSetlist(setlist: SavedSetlist, userId: string): Promis
     items: setlist.items,
     total_duration: setlist.totalDuration,
     created_at: new Date(setlist.createdAt).toISOString(),
+    band_id: bandId,
+    visibility: bandId ? 'band' : 'private',
   }, {
     onConflict: 'id',
   })

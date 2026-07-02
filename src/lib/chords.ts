@@ -142,18 +142,11 @@ export function transposeChordName(name: string, semitones: number, preferFlats 
   return newRoot + parsed.quality
 }
 
-/** Transpose a chordPro string in place, line by line */
+/** Transpose a chordPro string, only touching chord names inside [brackets] */
 export function transposeChordPro(chordPro: string, semitones: number): string {
   if (!chordPro || semitones === 0) return chordPro
-  // Split by bars (|) and process each chord
-  return chordPro.split(/(\|[^|]*\|)/).map(part => {
-    if (!part.startsWith('|')) return part
-    // Inside a bar: replace chord names
-    return part.replace(/\[?([A-G][#b]?[a-z0-9susmajdim+\-#]*)\]?/g, (full, chordName) => {
-      const transposed = transposeChordName(chordName, semitones)
-      // Preserve bracket if it was there
-      if (full.startsWith('[')) return `[${transposed}]`
-      return transposed
-    })
-  }).join('')
+  // Only transpose text inside [brackets] — leave lyrics untouched
+  return chordPro.replace(/\[([A-G][#b]?[a-z0-9susmajdim+\-#]*)\]/g, (full: string, chord: string) => {
+    return `[${transposeChordName(chord, semitones)}]`
+  })
 }
